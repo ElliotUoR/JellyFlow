@@ -1,0 +1,31 @@
+name: Deploy to Hetzner
+
+# See the RS3 Leagues Region Helper repo's docs/deployment.md section 11 for
+# the one-time server-side setup this depends on (a dedicated `deploy` user
+# + SSH key, shared across every project on jellyflow.xyz).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: hetzner-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH in and re-deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_DEPLOY_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/jellyflow-base
+            git pull
+            cd deploy
+            docker compose up -d

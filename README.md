@@ -49,6 +49,16 @@ Updating later is just `git pull` + re-copying `public/` (no build step) +
 `docker compose up -d` if the container itself needs recreating (it
 usually doesn't, since it mounts `public/` directly).
 
+## Auto-deploy (CI/CD)
+
+`.github/workflows/deploy.yml` SSHes into the server and re-runs the update
+commands above on every push to `main`. It depends on the same dedicated
+`deploy` user + SSH key set up once for the whole domain - see the RS3
+Leagues Region Helper repo's `docs/deployment.md` section 11 for that
+one-time setup. Once it's done, this repo just needs its own copy of the
+same three GitHub Actions secrets (Settings → Secrets and variables →
+Actions): `HETZNER_HOST`, `HETZNER_DEPLOY_USER`, `HETZNER_SSH_KEY`.
+
 ## Adding a new project to the list
 
 Add a new `<li class="project-card">`-style entry to `public/index.html`
