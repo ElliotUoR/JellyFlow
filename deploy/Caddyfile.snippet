@@ -1,0 +1,13 @@
+# Routing fragment for jellyflow.xyz/ (the JellyFlow landing page) - NOT a
+# standalone site block. Catches everything not already claimed by another
+# project's fragment (e.g. /Leagues/* is claimed by the RS3 Leagues Region
+# Helper repo's own fragment) - Caddy sorts handle/handle_path directives
+# ahead of a bare reverse_proxy regardless of which imported file they came
+# from, so this only ever serves requests nothing more specific matched.
+#
+# Deploy this file to /opt/caddy-shared/conf.d/jellyflow-base.caddy on the
+# server (the shared conf.d directory + canonical jellyflow.xyz block are
+# set up once - see the RS3 Leagues Region Helper repo's docs/deployment.md
+# step 2 for that one-time setup), then reload Caddy.
+
+reverse_proxy jellyflow_frontend:80

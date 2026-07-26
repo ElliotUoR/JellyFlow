@@ -1,0 +1,23 @@
+# JellyFlow landing page - purely static for now (no backend), so this is
+# just an nginx container serving ../public. Attaches to the same shared
+# `web` Docker network as every other project on jellyflow.xyz so the
+# shared Caddy instance can reach it by container name - see the RS3
+# Leagues Region Helper repo's docs/deployment.md for the one-time shared
+# network/Caddy setup this depends on.
+#
+# Usage (from this directory, on the server):
+#   docker compose up -d
+
+services:
+  frontend:
+    image: nginx:alpine
+    container_name: jellyflow_frontend
+    restart: unless-stopped
+    volumes:
+      - ../public:/usr/share/nginx/html:ro
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
