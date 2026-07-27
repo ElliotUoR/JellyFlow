@@ -29,3 +29,6 @@ jobs:
             git pull
             cd deploy
             docker compose up -d
+            cp Caddyfile.snippet /opt/caddy-shared/conf.d/jellyflow-base.caddy
+            cd /opt/livekit
+            docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile

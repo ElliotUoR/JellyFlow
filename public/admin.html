@@ -56,6 +56,30 @@
           <h2>Top referrers</h2>
           <table id="top-referrers-table" class="stats-table"></table>
         </div>
+        <div class="chart-panel">
+          <h2>Top browsers</h2>
+          <table id="top-browsers-table" class="stats-table"></table>
+        </div>
+        <div class="chart-panel">
+          <h2>Top operating systems</h2>
+          <table id="top-os-table" class="stats-table"></table>
+        </div>
+        <div class="chart-panel">
+          <h2>Device types</h2>
+          <table id="top-device-types-table" class="stats-table"></table>
+        </div>
+      </div>
+
+      <div class="chart-panel">
+        <div class="dashboard-header">
+          <h2>Short links</h2>
+          <span id="shortlinks-page-info" class="page-info"></span>
+        </div>
+        <table id="shortlinks-table" class="stats-table"></table>
+        <div class="pagination-controls">
+          <button type="button" id="shortlinks-prev" class="link-button">&larr; Newer</button>
+          <button type="button" id="shortlinks-next" class="link-button">Older &rarr;</button>
+        </div>
       </div>
     </section>
 
@@ -65,6 +89,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script src="admin.js"></script>
+  <script type="module" src="admin.js"></script>
+  <script type="module" src="adminBadge.js"></script>
 </body>
 </html>
