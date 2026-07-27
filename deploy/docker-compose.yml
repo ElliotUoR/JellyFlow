@@ -8,6 +8,15 @@
 # Usage (from this directory, on the server):
 #   docker compose up -d
 
+# Explicit project name - without this, Compose defaults to the current
+# directory's basename ("deploy"), which collides with any other project
+# whose compose file also lives in a directory named "deploy" (e.g. the RS3
+# Leagues Region Helper repo's). That collision previously caused a
+# `docker compose up` in the other project to recreate/disrupt this
+# container, since Compose tracks containers by project+service label, not
+# by container_name.
+name: jellyflow-base
+
 services:
   frontend:
     image: nginx:alpine
