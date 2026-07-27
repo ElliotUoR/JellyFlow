@@ -112,3 +112,139 @@ h1 {
   opacity: 1;
   color: var(--accent);
 }
+
+/* Admin dashboard (admin.html / admin.js) */
+
+.admin-page {
+  max-width: 900px;
+  text-align: left;
+}
+
+.admin-page h1,
+.admin-page > .tagline {
+  text-align: center;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 320px;
+  margin: 0 auto 32px;
+}
+
+.login-form input,
+#days-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text-h);
+  font: inherit;
+}
+
+.login-form button,
+.link-button {
+  padding: 10px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link-button {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text);
+  font-weight: 400;
+  padding: 8px 14px;
+}
+
+.form-error {
+  color: #d64545;
+  font-size: 14px;
+  text-align: center;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.dashboard-header #days-select {
+  width: auto;
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-bg);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.stat-label {
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.chart-panel {
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  margin-bottom: 24px;
+}
+
+.chart-panel h2 {
+  font-size: 15px;
+  margin: 0 0 12px;
+  color: var(--text-h);
+}
+
+.tables-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.stats-table th,
+.stats-table td {
+  text-align: left;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-table thead tr {
+  font-weight: 600;
+  color: var(--text-h);
+}

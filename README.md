@@ -4,11 +4,15 @@ Landing page for jellyflow.xyz - lists the projects hosted on the domain.
 Currently just links out to the RS3 Leagues Region Helper ("Leagues
 Planner"), deployed separately at `/Leagues`.
 
-Purely static for now (`public/index.html`, `public/style.css`) - no build
-step, no backend. An `admin.html` placeholder exists for a future login +
-analytics-viewing dashboard (reading the page_events data the Leagues
-Planner already tracks), but that's not built yet - just reserving the
-space.
+Purely static (`public/index.html`, `public/style.css`) - no build step, no
+backend of its own. `admin.html` is a password-protected analytics
+dashboard (unique visitors, pageviews, session length, top pages/referrers)
+that authenticates against and fetches data from the RS3 Leagues Region
+Helper repo's Node service at `/Leagues/api/admin/*` - same origin
+(`jellyflow.xyz`), so no CORS setup or backend of its own is needed here.
+See that repo's `server/src/routes/admin.js` and
+`server/src/lib/analyticsRollup.js` for how the data is collected and
+rolled up.
 
 ## Structure
 
@@ -16,7 +20,8 @@ space.
 public/           the actual site (nginx serves this directory as-is)
   index.html
   style.css
-  admin.html      placeholder - not wired up yet
+  admin.html      analytics dashboard - login form + charts (Chart.js via CDN)
+  admin.js        talks to /Leagues/api/admin/* (see RS3 Leagues repo)
 deploy/
   docker-compose.yml    one nginx container serving public/
   Caddyfile.snippet      routing fragment for the shared Caddy setup
