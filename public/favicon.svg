@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7dd8f0"/>
+      <stop offset="100%" stop-color="#2a8fc2"/>
+    </linearGradient>
+  </defs>
+  <path d="M12 28 C12 14 20 6 32 6 C44 6 52 14 52 28 C52 32 48 33 44 31 C40 34 36 35 32 32 C28 35 24 34 20 31 C16 33 12 32 12 28 Z" fill="url(#bell)"/>
+  <path d="M20 32 C19 40 22 46 20 54" stroke="#2a8fc2" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M28 34 C27 42 30 48 28 57" stroke="#2a8fc2" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M36 34 C37 42 34 48 36 57" stroke="#2a8fc2" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M44 32 C45 40 42 46 44 54" stroke="#2a8fc2" stroke-width="3" stroke-linecap="round" fill="none"/>
+</svg>
