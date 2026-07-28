@@ -107,6 +107,33 @@ function renderSummary(data) {
   renderTable(document.getElementById('top-device-types-table'), data.topDeviceTypes, 'deviceType', 'Device');
 }
 
+// Ever-incrementing usage counters (see RS3's deploy/migrations/008_usage_counters.sql
+// and routes/trackCounter.js) - all-time totals with no date-range concept
+// of their own, unlike everything renderSummary shows, so this is loaded
+// once (see initDashboard) rather than reloading on daysSelect's change
+// handler.
+function renderUsage(data) {
+  document.getElementById('stat-karamja-toggled-off').textContent = data.karamjaToggledOffCount.toLocaleString();
+  document.getElementById('stat-import-relics-used').textContent = data.importRelicsUsedCount.toLocaleString();
+  renderTable(document.getElementById('top-region-picks-table'), data.regionPicks, 'region', 'Region');
+  renderTable(document.getElementById('top-region-combos-table'), data.regionCombos, 'combo', 'Combination');
+  renderTable(document.getElementById('top-league-relics-table'), data.leagueRelicPicks, 'relic', 'Relic');
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch(`${API_BASE}/usage`, { credentials: 'include' });
+    if (res.status === 401) {
+      showLogin();
+      return;
+    }
+    if (!res.ok) throw new Error(`usage failed: ${res.status}`);
+    renderUsage(await res.json());
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function renderShortlinksTable(data) {
   const table = document.getElementById('shortlinks-table');
   table.innerHTML = '';
@@ -180,13 +207,16 @@ async function loadSummary() {
   }
 }
 
-// Loads both the summary and the first shortlinks page - used on initial
-// load and right after logging in. daysSelect's own change handler only
-// reloads the summary (see below), so browsing a shortlinks page isn't lost
+// Loads the summary, the first shortlinks page, and usage counters - used
+// on initial load and right after logging in. daysSelect's own change
+// handler only reloads the summary (see below), so browsing a shortlinks
+// page (or the usage counters, which have no date range at all) isn't lost
 // just from tweaking the date range.
 async function initDashboard() {
   const loaded = await loadSummary();
-  if (loaded) await loadShortlinks(1);
+  if (loaded) {
+    await Promise.all([loadShortlinks(1), loadUsage()]);
+  }
 }
 
 loginForm.addEventListener('submit', async (event) => {
