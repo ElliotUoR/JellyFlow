@@ -8,24 +8,42 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="page admin-page">
-    <h1>Admin</h1>
+  <nav class="site-nav">
+    <a class="brand" href="index.html">
+      <img src="favicon.svg" alt="" />
+      JellyFlow
+    </a>
+    <a class="nav-link" href="index.html">&larr; Back to site</a>
+  </nav>
 
-    <form id="login-form" class="login-form">
-      <p class="tagline">Enter the admin password to access admin panel</p>
-      <input type="password" id="login-password" name="password" placeholder="Password" autocomplete="current-password" required />
-      <button type="submit">Log in</button>
-      <p id="login-error" class="form-error" hidden></p>
-    </form>
+  <main class="page admin-page">
+    <div class="hero">
+      <div class="hero-title-row">
+        <h1>Admin</h1>
+        <p class="tagline">Site analytics for jellyflow.xyz</p>
+      </div>
+    </div>
+
+    <div class="login-shell">
+      <form id="login-form" class="login-form">
+        <p class="tagline">Enter the admin password to access admin panel</p>
+        <input type="password" id="login-password" name="password" placeholder="Password" autocomplete="current-password" required />
+        <button type="submit">Log in</button>
+        <p id="login-error" class="form-error" hidden></p>
+      </form>
+    </div>
 
     <section id="dashboard" hidden>
       <div class="dashboard-header">
-        <select id="days-select">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </select>
-        <button type="button" id="logout-button" class="link-button">Log out</button>
+        <h2>Overview</h2>
+        <div class="dashboard-controls">
+          <select id="days-select">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button type="button" id="logout-button" class="link-button">Log out</button>
+        </div>
       </div>
 
       <div class="stat-tiles">
@@ -43,19 +61,26 @@
         </div>
       </div>
 
-      <div class="chart-panel">
-        <canvas id="pageviews-chart" height="220"></canvas>
+      <div class="analytics-grid">
+        <div class="chart-panel">
+          <h2>Pageviews over time</h2>
+          <div class="chart-canvas-wrap">
+            <canvas id="pageviews-chart"></canvas>
+          </div>
+        </div>
+        <div class="side-panels">
+          <div class="chart-panel">
+            <h2>Top pages</h2>
+            <table id="top-paths-table" class="stats-table"></table>
+          </div>
+          <div class="chart-panel">
+            <h2>Top referrers</h2>
+            <table id="top-referrers-table" class="stats-table"></table>
+          </div>
+        </div>
       </div>
 
-      <div class="tables-row">
-        <div class="chart-panel">
-          <h2>Top pages</h2>
-          <table id="top-paths-table" class="stats-table"></table>
-        </div>
-        <div class="chart-panel">
-          <h2>Top referrers</h2>
-          <table id="top-referrers-table" class="stats-table"></table>
-        </div>
+      <div class="breakdown-grid">
         <div class="chart-panel">
           <h2>Top browsers</h2>
           <table id="top-browsers-table" class="stats-table"></table>
@@ -84,8 +109,6 @@
     </section>
 
     <p id="dashboard-error" class="form-error" hidden></p>
-
-    <p><a href="index.html">&larr; Back to JellyFlow</a></p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

@@ -67,6 +67,10 @@ function renderTable(table, rows, keyField, headerLabel) {
   }
 }
 
+function chartColor(varName) {
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+
 function renderChart(dailySeries) {
   const ctx = document.getElementById('pageviews-chart');
   const labels = dailySeries.map((d) => d.day);
@@ -79,12 +83,13 @@ function renderChart(dailySeries) {
     data: {
       labels,
       datasets: [
-        { label: 'Pageviews', data: pageviews, borderColor: '#7a3bd6', tension: 0.2 },
-        { label: 'Unique visitors', data: uniqueVisitors, borderColor: '#4b4b52', tension: 0.2 },
+        { label: 'Pageviews', data: pageviews, borderColor: chartColor('--chart-1'), borderWidth: 2, tension: 0.2, pointRadius: 3 },
+        { label: 'Unique visitors', data: uniqueVisitors, borderColor: chartColor('--chart-2'), borderWidth: 2, tension: 0.2, pointRadius: 3 },
       ],
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: { y: { beginAtZero: true } },
     },
   });

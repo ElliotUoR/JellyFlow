@@ -8,22 +8,38 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <nav class="site-nav">
+    <a class="brand" href="index.html">
+      <img src="favicon.svg" alt="" />
+      JellyFlow
+    </a>
+    <a class="nav-link" href="admin.html">Admin</a>
+  </nav>
+
   <main class="page">
-    <h1>JellyFlow</h1>
-    <p class="tagline">What are you looking for?</p>
+    <div class="hero">
+      <div class="hero-title-row">
+        <h1>JellyFlow</h1>
+        <p class="tagline">What are you looking for?</p>
+      </div>
+      <span class="hero-meta">1 project hosted on this domain</span>
+    </div>
 
     <ul class="project-list">
       <li>
         <a class="project-card" href="/Leagues/">
-          <span class="project-name">Leagues Planner</span>
-          <span class="project-desc">RS3 Leagues region &amp; gear planner</span>
+          <span class="project-card-text">
+            <span class="project-name">Leagues Planner</span>
+            <span class="project-desc">RS3 Leagues region &amp; gear planner</span>
+          </span>
+          <span class="project-arrow" aria-hidden="true">&rarr;</span>
         </a>
       </li>
     </ul>
   </main>
 
   <footer class="site-footer">
-    <a href="admin.html">Admin</a>
+    <a href="admin.html">Site analytics</a>
   </footer>
 
   <script type="module" src="adminBadge.js"></script>
