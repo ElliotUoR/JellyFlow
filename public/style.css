@@ -134,6 +134,10 @@ h1 {
   margin: 0 auto 32px;
 }
 
+.login-form[hidden] {
+  display: none;
+}
+
 .login-form input,
 #days-select {
   width: 100%;
