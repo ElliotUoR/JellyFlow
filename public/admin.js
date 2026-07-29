@@ -118,6 +118,7 @@ function renderUsage(data) {
   renderTable(document.getElementById('top-region-picks-table'), data.regionPicks, 'region', 'Region');
   renderTable(document.getElementById('top-region-combos-table'), data.regionCombos, 'combo', 'Combination');
   renderTable(document.getElementById('top-league-relics-table'), data.leagueRelicPicks, 'relic', 'Relic');
+  renderTable(document.getElementById('top-drop-table-views-table'), data.dropTableViews, 'relic', 'Relic');
 }
 
 async function loadUsage() {
