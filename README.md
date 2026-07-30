@@ -2,7 +2,7 @@
 
 Landing page for jellyflow.xyz - lists the projects hosted on the domain.
 Currently just links out to the RS3 Leagues Region Helper ("Leagues
-Planner"), deployed separately at `/Leagues`.
+Planner"), deployed separately at `/Leagues`. May do more in the future.
 
 Purely static (`public/index.html`, `public/style.css`) - no build step, no
 backend of its own. `admin.html` is a password-protected analytics
