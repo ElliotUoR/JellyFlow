@@ -33,126 +33,300 @@
       </form>
     </div>
 
-    <section id="dashboard" hidden>
-      <div class="dashboard-header">
-        <h2>Overview</h2>
-        <div class="dashboard-controls">
-          <select id="days-select">
+    <!-- data-design switches the whole dashboard between the current design
+         ("modern") and the original one ("classic"). Everything below renders
+         from the same data and the same container ids either way - the mode
+         only changes CSS and which of admin.js's two row renderers runs. -->
+    <section id="dashboard" data-design="modern" hidden>
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <h2 class="toolbar-title">Overview</h2>
+          <select id="days-select" aria-label="Date range">
             <option value="7">Last 7 days</option>
             <option value="30" selected>Last 30 days</option>
             <option value="90">Last 90 days</option>
           </select>
+          <button type="button" id="refresh-button" class="refresh-button">
+            <span class="refresh-icon" aria-hidden="true"></span>
+            <span>Refresh</span>
+          </button>
+          <span id="last-updated" class="last-updated" aria-live="polite"></span>
+        </div>
+
+        <div class="toolbar-group">
+          <label class="switch" for="auto-active-toggle">
+            <input type="checkbox" id="auto-active-toggle" />
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Auto-refresh active users</span>
+          </label>
+          <label class="switch" for="auto-data-toggle">
+            <input type="checkbox" id="auto-data-toggle" />
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Auto-refresh data</span>
+          </label>
+          <label class="switch" for="classic-toggle">
+            <input type="checkbox" id="classic-toggle" />
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-text">Classic design</span>
+          </label>
           <button type="button" id="logout-button" class="link-button">Log out</button>
         </div>
       </div>
 
       <div class="stat-tiles">
         <!-- Live "right now" figure - unlike every other tile here it is not
-             scoped to the selected date range, hence the explicit label. -->
-        <div class="stat-tile">
+             scoped to the selected date range, hence the explicit label. It is
+             also the only tile the "auto-refresh active users" toggle repaints,
+             which is why it carries its own data-live-scope. -->
+        <div class="stat-tile" data-live-scope="active">
           <span class="stat-value" id="stat-active-users">—</span>
           <span class="stat-label">Active now <span class="stat-live-dot" aria-hidden="true"></span></span>
         </div>
-        <div class="stat-tile">
+        <div class="stat-tile" data-live-scope="data">
           <span class="stat-value" id="stat-visitors">—</span>
           <span class="stat-label">Unique visitors</span>
+          <span class="stat-spark" id="spark-visitors" aria-hidden="true"></span>
         </div>
-        <div class="stat-tile">
+        <div class="stat-tile" data-live-scope="data">
           <span class="stat-value" id="stat-pageviews">—</span>
           <span class="stat-label">Pageviews</span>
+          <span class="stat-spark" id="spark-pageviews" aria-hidden="true"></span>
         </div>
-        <div class="stat-tile">
+        <div class="stat-tile" data-live-scope="data">
           <span class="stat-value" id="stat-session-length">—</span>
           <span class="stat-label">Avg. session length</span>
         </div>
       </div>
 
       <div class="analytics-grid">
-        <div class="chart-panel">
-          <h2>Pageviews over time</h2>
-          <div class="chart-canvas-wrap">
-            <canvas id="pageviews-chart"></canvas>
+        <div class="chart-panel" data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Pageviews over time</h2>
+            </div>
+            <div class="chart-canvas-wrap">
+              <canvas id="pageviews-chart"></canvas>
+            </div>
           </div>
         </div>
         <div class="side-panels">
-          <div class="chart-panel">
-            <h2>Top pages</h2>
-            <table id="top-paths-table" class="stats-table"></table>
+          <div class="chart-panel" data-panel data-live-scope="data">
+            <div class="panel-inner">
+              <div class="panel-head">
+                <h2>Top pages</h2>
+                <span class="panel-meta" data-panel-meta></span>
+              </div>
+              <div class="panel-body">
+                <table id="top-paths-table" class="stats-table"></table>
+              </div>
+              <div class="panel-pager" data-panel-pager hidden>
+                <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+                <span class="pager-info" data-pager-info></span>
+                <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+              </div>
+            </div>
           </div>
-          <div class="chart-panel">
-            <h2>Top referrers</h2>
-            <table id="top-referrers-table" class="stats-table"></table>
+          <div class="chart-panel" data-panel data-live-scope="data">
+            <div class="panel-inner">
+              <div class="panel-head">
+                <h2>Top referrers</h2>
+                <span class="panel-meta" data-panel-meta></span>
+              </div>
+              <div class="panel-body">
+                <table id="top-referrers-table" class="stats-table"></table>
+              </div>
+              <div class="panel-pager" data-panel-pager hidden>
+                <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+                <span class="pager-info" data-pager-info></span>
+                <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="breakdown-grid">
-        <div class="chart-panel">
-          <h2>Top browsers</h2>
-          <table id="top-browsers-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Top browsers</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-browsers-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Top operating systems</h2>
-          <table id="top-os-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Top operating systems</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-os-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Device types</h2>
-          <table id="top-device-types-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Device types</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-device-types-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="dashboard-header">
-        <h2>Region & relic usage</h2>
+      <div class="dashboard-header section-header">
+        <h2>Region &amp; relic usage</h2>
         <span class="page-info">All-time - not scoped to the date range above</span>
       </div>
 
       <div class="stat-tiles">
-        <div class="stat-tile">
+        <div class="stat-tile" data-live-scope="data">
           <span class="stat-value" id="stat-karamja-toggled-off">—</span>
           <span class="stat-label">Karamja toggled off</span>
         </div>
-        <div class="stat-tile">
+        <div class="stat-tile" data-live-scope="data">
           <span class="stat-value" id="stat-import-relics-used">—</span>
           <span class="stat-label">Import-relics API used</span>
         </div>
       </div>
 
       <div class="breakdown-grid">
-        <div class="chart-panel">
-          <h2>Top regions picked</h2>
-          <table id="top-region-picks-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Top regions picked</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-region-picks-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Top region combinations</h2>
-          <table id="top-region-combos-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Top region combinations</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-region-combos-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Top league relics picked</h2>
-          <table id="top-league-relics-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Top league relics picked</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-league-relics-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Drop table views</h2>
-          <table id="top-drop-table-views-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Drop table views</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-drop-table-views-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Build guide views</h2>
-          <table id="top-build-guide-views-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Build guide views</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-build-guide-views-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
-        <div class="chart-panel">
-          <h2>Top blessings picked</h2>
-          <table id="top-blessing-picks-table" class="stats-table"></table>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Top blessings picked</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="top-blessing-picks-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="chart-panel">
-        <div class="dashboard-header">
-          <h2>Short links</h2>
-          <span id="shortlinks-page-info" class="page-info"></span>
-        </div>
-        <table id="shortlinks-table" class="stats-table"></table>
-        <div class="pagination-controls">
-          <button type="button" id="shortlinks-prev" class="link-button">&larr; Newer</button>
-          <button type="button" id="shortlinks-next" class="link-button">Older &rarr;</button>
+      <!-- Short links paginate server-side (see admin.js's loadShortlinks), so
+           this panel keeps its own controls rather than the client-side pager
+           every panel above shares. -->
+      <div class="chart-panel shortlinks-panel" data-live-scope="data">
+        <div class="panel-inner">
+          <div class="panel-head">
+            <h2>Short links</h2>
+            <span id="shortlinks-page-info" class="page-info"></span>
+          </div>
+          <div class="panel-body">
+            <table id="shortlinks-table" class="stats-table"></table>
+          </div>
+          <div class="pagination-controls">
+            <button type="button" id="shortlinks-prev" class="link-button">&larr; Newer</button>
+            <button type="button" id="shortlinks-next" class="link-button">Older &rarr;</button>
+          </div>
         </div>
       </div>
     </section>

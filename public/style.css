@@ -11,6 +11,11 @@
   --shadow: 0 1px 2px rgba(20, 20, 30, 0.04), 0 8px 24px rgba(20, 20, 30, 0.05);
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
+  /* Wash laid over a container that an auto-refresh toggle is driving. Kept
+     very low-alpha deliberately: it must read as "this updates itself" at a
+     glance without competing with the numbers inside it. */
+  --live-tint: rgba(122, 59, 214, 0.05);
+  --live-border: rgba(122, 59, 214, 0.4);
 
   font: 16px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
@@ -32,6 +37,8 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.25);
     --chart-1: #3987e5;
     --chart-2: #d95926;
+    --live-tint: rgba(192, 132, 252, 0.08);
+    --live-border: rgba(192, 132, 252, 0.4);
   }
 }
 
@@ -500,9 +507,546 @@ a {
   pointer-events: none;
 }
 
+/* ==========================================================================
+   Dashboard chrome shared by both designs (admin.html's toolbar)
+   ========================================================================== */
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 24px;
+  padding: 12px 0;
+  background: var(--bg-plane);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.toolbar-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-h);
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.refresh-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.refresh-icon {
+  display: inline-block;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.refresh-icon::before {
+  content: '\21bb';
+}
+
+.refresh-button.is-refreshing .refresh-icon {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Toggle switch (auto-refresh x2 + classic design) */
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.switch input:checked + .switch-track .switch-thumb {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switch input:checked ~ .switch-text {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.switch:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The chart panel is a flex column in both designs; with .panel-inner now
+   between it and the canvas, the column has to live on the wrapper. */
+.chart-panel:has(#pageviews-chart) > .panel-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.empty-cell {
+  color: var(--text-muted);
+}
+
+/* The classic layout stretches the chart to match the stacked side panels
+   beside it. Those held 10 rows when this design shipped; at TOP_N 25 they
+   are ~2600px tall and would drag the chart to match. Pin the chart to its
+   own height instead of letting the row count drive it. */
+#dashboard[data-design='classic'] .analytics-grid {
+  align-items: start;
+}
+
+#dashboard[data-design='classic'] .chart-panel:has(#pageviews-chart) .chart-canvas-wrap {
+  height: 560px;
+}
+
+.section-header {
+  margin-top: 32px;
+}
+
+/* ==========================================================================
+   Modern design
+   Card chrome moves from .chart-panel onto .panel-inner so the outer element
+   can hold a fixed collapsed height while the inner one grows past it on
+   hover - the panel lifts over its neighbours instead of reflowing the grid.
+   ========================================================================== */
+
+#dashboard[data-design='modern'] {
+  /* Collapsed panels show COLLAPSED_ROWS rows (see admin.js - the two must
+     agree, or the "more below" fade lies about what is clipped). */
+  --panel-rows: 5;
+  /* Measured off the rendered page, not guessed: 38px row, and 72px for the
+     panel heading (25 + 10 margin) plus the column header row (37). */
+  --panel-row-h: 38px;
+  --panel-pad: 14px;
+  --panel-collapsed-h: calc(
+    var(--panel-pad) * 2 + 72px + var(--panel-rows) * var(--panel-row-h)
+  );
+}
+
+#dashboard[data-design='modern'] .chart-panel {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+#dashboard[data-design='modern'] .panel-inner {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  padding: var(--panel-pad) 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+#dashboard[data-design='modern'] .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+#dashboard[data-design='modern'] .panel-head h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+#dashboard[data-design='modern'] .panel-meta {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- The expanding list panels --- */
+
+#dashboard[data-design='modern'] .chart-panel[data-panel] {
+  position: relative;
+  height: var(--panel-collapsed-h);
+}
+
+#dashboard[data-design='modern'] .chart-panel[data-panel] > .panel-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--panel-collapsed-h);
+  overflow: hidden;
+  transition: height 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+#dashboard[data-design='modern'] .chart-panel[data-panel]:hover > .panel-inner,
+#dashboard[data-design='modern'] .chart-panel[data-panel]:focus-within > .panel-inner,
+#dashboard[data-design='modern'] .chart-panel[data-panel].is-pinned > .panel-inner {
+  z-index: 30;
+  height: auto;
+  border-color: var(--accent);
+  box-shadow: 0 2px 6px rgba(20, 20, 30, 0.08), 0 18px 44px rgba(20, 20, 30, 0.18);
+}
+
+/* Signals the clipped rows. Only painted when rows really are cut off
+   (admin.js sets .has-more), and cleared once the panel is open. */
+#dashboard[data-design='modern'] .chart-panel[data-panel].has-more > .panel-inner::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 0;
+  height: 46px;
+  border-radius: 0 0 13px 13px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 82%);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+#dashboard[data-design='modern'] .chart-panel[data-panel]:hover > .panel-inner::after,
+#dashboard[data-design='modern'] .chart-panel[data-panel]:focus-within > .panel-inner::after,
+#dashboard[data-design='modern'] .chart-panel[data-panel].is-pinned > .panel-inner::after {
+  opacity: 0;
+}
+
+/* overflow:hidden matters: the table holds a full page of rows (12) while the
+   collapsed body is 5 rows tall, and without this the surplus spills straight
+   over the pager below it. */
+#dashboard[data-design='modern'] .panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The pager belongs to the expanded state - collapsed, it would sit on the
+   fade with nothing above it to page through. :not([hidden]) keeps the
+   single-page case (admin.js sets the attribute) hidden either way. */
+#dashboard[data-design='modern'] .chart-panel[data-panel] .panel-pager {
+  display: none;
+}
+
+#dashboard[data-design='modern'] .chart-panel[data-panel]:hover .panel-pager:not([hidden]),
+#dashboard[data-design='modern'] .chart-panel[data-panel]:focus-within .panel-pager:not([hidden]),
+#dashboard[data-design='modern'] .chart-panel[data-panel].is-pinned .panel-pager:not([hidden]) {
+  display: flex;
+}
+
+/* --- Rows: rank + label + magnitude bar + count --- */
+
+/* Scoped to [data-panel]: the short links table is a four-column record list,
+   not a rank list, and must keep auto layout and its own column widths. */
+#dashboard[data-design='modern'] [data-panel] .stats-table {
+  table-layout: fixed;
+}
+
+#dashboard[data-design='modern'] .stats-table th {
+  padding-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+#dashboard[data-design='modern'] .stats-table td {
+  padding: 6px 4px;
+  border-bottom: none;
+  vertical-align: top;
+}
+
+#dashboard[data-design='modern'] .rank-cell {
+  width: 30px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#dashboard[data-design='modern'] .count-cell {
+  width: 72px;
+  text-align: right;
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+#dashboard[data-design='modern'] .label-cell {
+  min-width: 0;
+}
+
+.row-label {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Magnitude meter: one hue, the track a low-alpha step of the same ramp, so
+   fill-vs-track reads as the same scale rather than two categories. Square at
+   the baseline, rounded at the data end. */
+.row-track {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+}
+
+.row-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+
+/* --- Per-panel pager --- */
+
+.panel-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-pager[hidden] {
+  display: none;
+}
+
+.pager-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pager-btn {
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pager-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* --- Modern layout: full-width chart, then uniform card grids --- */
+
+#dashboard[data-design='modern'] .analytics-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#dashboard[data-design='modern'] .analytics-grid > .chart-panel {
+  grid-column: 1 / -1;
+}
+
+/* Lets the two side panels become grid items of .analytics-grid itself, so
+   the chart can span the full width above them without moving any markup. */
+#dashboard[data-design='modern'] .side-panels {
+  display: contents;
+}
+
+#dashboard[data-design='modern'] .chart-panel:has(#pageviews-chart) .chart-canvas-wrap {
+  min-height: 300px;
+}
+
+@media (min-width: 1000px) {
+  #dashboard[data-design='modern'] .breakdown-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* --- Modern stat tiles --- */
+
+#dashboard[data-design='modern'] .stat-tile {
+  gap: 2px;
+  padding: 14px 16px;
+}
+
+/* The usage section has only two tiles; left on the shared auto-fit track they
+   stretch to half the page each and dwarf the four traffic tiles above. */
+#dashboard[data-design='modern'] .stat-tiles:has(> .stat-tile:nth-child(2):last-child) {
+  grid-template-columns: repeat(2, minmax(200px, 340px));
+}
+
+#dashboard[data-design='modern'] .stat-label {
+  order: -1;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Proportional figures, not tabular: at 30px a tabular `1` carries the width
+   of a `0` and the number reads loose. Table columns keep tabular-nums. */
+#dashboard[data-design='modern'] .stat-value {
+  font-size: 30px;
+  line-height: 1.15;
+  font-variant-numeric: normal;
+}
+
+.stat-spark {
+  display: block;
+  height: 24px;
+  margin-top: 6px;
+}
+
+.stat-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.spark-line {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+
+.spark-dot {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+#dashboard[data-design='classic'] .stat-spark {
+  display: none;
+}
+
+/* ==========================================================================
+   Auto-refresh tint - marks exactly the containers a live toggle is driving.
+   "Auto-refresh data" reloads the summary, which carries activeUsers too, so
+   it tints the Active-now tile as well as everything else.
+   ========================================================================== */
+
+#dashboard[data-design='classic'][data-live-data='on'] .chart-panel[data-live-scope='data'],
+#dashboard[data-design='modern'][data-live-data='on'] [data-live-scope='data'] > .panel-inner,
+#dashboard[data-live-data='on'] .stat-tile[data-live-scope='data'],
+#dashboard[data-live-data='on'] .stat-tile[data-live-scope='active'],
+#dashboard[data-live-active='on'] .stat-tile[data-live-scope='active'] {
+  background-image: linear-gradient(var(--live-tint), var(--live-tint));
+  border-color: var(--live-border);
+}
+
 @media (max-width: 900px) {
   .analytics-grid {
     grid-template-columns: 1fr;
+  }
+
+  #dashboard[data-design='modern'] .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #dashboard[data-design='modern'] .side-panels {
+    display: contents;
+  }
+
+  .toolbar {
+    position: static;
   }
 }
 

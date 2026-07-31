@@ -14,6 +14,28 @@ See that repo's `server/src/routes/admin.js` and
 `server/src/lib/analyticsRollup.js` for how the data is collected and
 rolled up.
 
+### Dashboard controls
+
+- **Refresh** reloads every panel on demand; **auto-refresh data** does the
+  same on a 60s timer.
+- **Auto-refresh active users** polls only `GET /Leagues/api/admin/active-users`
+  on a 60s timer. That endpoint exists so the live gauge can be polled without
+  re-running `/summary`'s Postgres aggregations every minute - **it ships in
+  the RS3 Leagues repo, so deploy that before this toggle does anything**.
+  Until then the dashboard detects the 404, disables the toggle and explains
+  why, rather than failing on a loop.
+- Containers driven by an active toggle carry a faint tint, so it is obvious
+  which numbers are updating themselves.
+- **Classic design** switches back to the original dashboard layout. Both
+  designs render from the same fetched data and the same container ids - only
+  the CSS and which row renderer runs in `admin.js` differ - so the toggle
+  costs no extra requests. Preferences persist in `localStorage`.
+
+Panels show their top 5 rows and expand over their neighbours on hover (or
+click, for touch/keyboard) without reflowing the grid; lists longer than a
+page get an in-panel pager. The traffic panels are capped server-side by
+`TOP_N` in the RS3 repo's `routes/admin.js`.
+
 ## Structure
 
 ```

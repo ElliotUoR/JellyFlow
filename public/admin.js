@@ -6,6 +6,24 @@
 const API_BASE = '/Leagues/api/admin';
 const SHORTLINKS_PAGE_SIZE = 25;
 
+// Rows shown per page in a panel once it is expanded. The server returns up to
+// 25 for the traffic panels (TOP_N in the RS3 repo's routes/admin.js) and
+// every row for the usage ones, so the long lists page rather than scroll
+// forever.
+const PANEL_PAGE_SIZE = 12;
+// How many rows a collapsed panel shows. Must match --panel-rows in style.css,
+// which derives the collapsed height from it - this copy only decides whether
+// the "more below" fade is shown.
+const COLLAPSED_ROWS = 5;
+const AUTO_REFRESH_MS = 60 * 1000;
+const CLOCK_TICK_MS = 10 * 1000;
+
+const STORAGE_KEYS = {
+  design: 'jf-admin-design',
+  autoActive: 'jf-admin-auto-active',
+  autoData: 'jf-admin-auto-data',
+};
+
 const loginForm = document.getElementById('login-form');
 const loginPassword = document.getElementById('login-password');
 const loginError = document.getElementById('login-error');
@@ -13,20 +31,67 @@ const dashboard = document.getElementById('dashboard');
 const dashboardError = document.getElementById('dashboard-error');
 const daysSelect = document.getElementById('days-select');
 const logoutButton = document.getElementById('logout-button');
+const refreshButton = document.getElementById('refresh-button');
+const lastUpdatedEl = document.getElementById('last-updated');
+const autoActiveToggle = document.getElementById('auto-active-toggle');
+const autoDataToggle = document.getElementById('auto-data-toggle');
+const classicToggle = document.getElementById('classic-toggle');
 const shortlinksPrevButton = document.getElementById('shortlinks-prev');
 const shortlinksNextButton = document.getElementById('shortlinks-next');
 
 let pageviewsChart;
 let shortlinksPage = 1;
 
+// Everything the dashboard has fetched, kept so the design toggle and the
+// panel pagers can re-render without going back to the network.
+const state = {
+  summary: null,
+  usage: null,
+  lastUpdatedAt: null,
+  refreshing: false,
+  // Set once the active-users endpoint 404s, so the poll doesn't keep firing
+  // at a backend that hasn't shipped it yet (this dashboard and the RS3
+  // service deploy independently).
+  activeUsersUnavailable: false,
+};
+
+let autoActiveTimer = null;
+let autoDataTimer = null;
+
+// tableId -> which slice of which payload fills it. Drives both renderers and
+// the per-panel pagers, so a panel is described in exactly one place.
+const PANELS = [
+  { tableId: 'top-paths-table', source: 'summary', field: 'topPaths', key: 'path', header: 'Page' },
+  { tableId: 'top-referrers-table', source: 'summary', field: 'topReferrers', key: 'referrer', header: 'Referrer' },
+  { tableId: 'top-browsers-table', source: 'summary', field: 'topBrowsers', key: 'browser', header: 'Browser' },
+  { tableId: 'top-os-table', source: 'summary', field: 'topOperatingSystems', key: 'os', header: 'OS' },
+  { tableId: 'top-device-types-table', source: 'summary', field: 'topDeviceTypes', key: 'deviceType', header: 'Device' },
+  { tableId: 'top-region-picks-table', source: 'usage', field: 'regionPicks', key: 'region', header: 'Region' },
+  { tableId: 'top-region-combos-table', source: 'usage', field: 'regionCombos', key: 'combo', header: 'Combination' },
+  { tableId: 'top-league-relics-table', source: 'usage', field: 'leagueRelicPicks', key: 'relic', header: 'Relic' },
+  { tableId: 'top-drop-table-views-table', source: 'usage', field: 'dropTableViews', key: 'relic', header: 'Relic' },
+  { tableId: 'top-build-guide-views-table', source: 'usage', field: 'buildGuideViews', key: 'build', header: 'Build' },
+  { tableId: 'top-blessing-picks-table', source: 'usage', field: 'blessingPicks', key: 'blessing', header: 'Blessing' },
+];
+
+// Current page per panel, by tableId. Deliberately survives a refresh - an
+// auto-refresh tick shouldn't yank you back to page 1 of a list you're reading.
+const panelPages = new Map();
+
 function showLogin() {
   loginForm.hidden = false;
   dashboard.hidden = true;
+  stopAutoActive();
+  stopAutoData();
 }
 
 function showDashboard() {
   loginForm.hidden = true;
   dashboard.hidden = false;
+}
+
+function isClassic() {
+  return dashboard.dataset.design === 'classic';
 }
 
 function formatDuration(totalSeconds) {
@@ -39,6 +104,20 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString();
 }
 
+// Stat tiles are display-size numbers, so they get compacted past 5 digits to
+// stay on one line; the exact figure stays in the title attribute.
+function formatCompact(n) {
+  if (n < 10000) return n.toLocaleString();
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+}
+
+function setStat(id, value, exact) {
+  const el = document.getElementById(id);
+  el.textContent = value;
+  if (exact !== undefined) el.title = exact;
+}
+
 function insertHeaderRow(table, labels) {
   const row = table.createTHead().insertRow();
   for (const label of labels) {
@@ -48,23 +127,141 @@ function insertHeaderRow(table, labels) {
   }
 }
 
+// table.insertRow() appends to the table's LAST section, and createTHead() has
+// always run first here - so every data row was landing inside <thead>, which
+// is why the classic design renders each row in header weight and why
+// `.stats-table tbody tr` never matched. Rows go in an explicit tbody instead.
+function bodyOf(table) {
+  return table.tBodies[0] ?? table.createTBody();
+}
+
+function emptyRow(table, colSpan, message) {
+  const row = bodyOf(table).insertRow();
+  const cell = row.insertCell();
+  cell.colSpan = colSpan;
+  cell.className = 'empty-cell';
+  cell.textContent = message;
+}
+
+// The original design's renderer, so "Classic design" really is the old
+// dashboard rather than a restyled approximation of it: every row, no rank
+// column, no bars, no pager. Only difference from what shipped before is the
+// tbody fix above, which is a correctness fix rather than a design change.
 function renderTable(table, rows, keyField, headerLabel) {
   table.innerHTML = '';
   insertHeaderRow(table, [headerLabel, 'Count']);
 
   if (rows.length === 0) {
-    const row = table.insertRow();
-    const cell = row.insertCell();
-    cell.colSpan = 2;
-    cell.textContent = 'No data yet';
+    emptyRow(table, 2, 'No data yet');
     return;
   }
 
   for (const row of rows) {
-    const tr = table.insertRow();
+    const tr = bodyOf(table).insertRow();
     tr.insertCell().textContent = row[keyField];
     tr.insertCell().textContent = row.count;
   }
+}
+
+// The current design's renderer: one page of rows, each with its overall rank
+// and a magnitude bar. Bars are scaled to the largest count in the whole list
+// rather than the page, so the bar for #1 on page 2 doesn't jump back to full
+// width and misstate its size.
+function renderRankTable(table, rows, keyField, headerLabel, page, maxCount) {
+  table.innerHTML = '';
+  insertHeaderRow(table, ['#', headerLabel, 'Count']);
+
+  if (rows.length === 0) {
+    emptyRow(table, 3, 'No data yet');
+    return;
+  }
+
+  const start = (page - 1) * PANEL_PAGE_SIZE;
+  rows.slice(start, start + PANEL_PAGE_SIZE).forEach((row, i) => {
+    const tr = bodyOf(table).insertRow();
+
+    const rankCell = tr.insertCell();
+    rankCell.className = 'rank-cell';
+    rankCell.textContent = start + i + 1;
+
+    // textContent throughout, never innerHTML - paths and especially referrers
+    // are visitor-supplied strings that arrive here unescaped.
+    const labelCell = tr.insertCell();
+    labelCell.className = 'label-cell';
+    const label = document.createElement('span');
+    label.className = 'row-label';
+    label.textContent = row[keyField];
+    label.title = row[keyField];
+    labelCell.appendChild(label);
+
+    const track = document.createElement('span');
+    track.className = 'row-track';
+    const fill = document.createElement('span');
+    fill.className = 'row-fill';
+    fill.style.width = `${maxCount > 0 ? (row.count / maxCount) * 100 : 0}%`;
+    track.appendChild(fill);
+    labelCell.appendChild(track);
+
+    const countCell = tr.insertCell();
+    countCell.className = 'count-cell';
+    countCell.textContent = row.count.toLocaleString();
+  });
+}
+
+function panelElFor(tableId) {
+  return document.getElementById(tableId).closest('[data-panel]');
+}
+
+function renderPanel(panel) {
+  const table = document.getElementById(panel.tableId);
+  const panelEl = panelElFor(panel.tableId);
+  const payload = state[panel.source];
+  // Nothing fetched for this source yet - leave the panel alone rather than
+  // painting "No data yet" over it. renderAllPanels runs when the summary
+  // lands, which is before the usage payload it shares the call with, so
+  // without this the usage panels would flash empty on every load.
+  if (!payload) return;
+  // `?? []` rather than assuming the field exists: this dashboard and the RS3
+  // backend deploy independently, so a field this build knows about may not be
+  // in the response yet. Renders "No data yet" instead of throwing and
+  // blanking every panel after it.
+  const rows = payload[panel.field] ?? [];
+
+  const pager = panelEl.querySelector('[data-panel-pager]');
+  const meta = panelEl.querySelector('[data-panel-meta]');
+
+  if (isClassic()) {
+    renderTable(table, rows, panel.key, panel.header);
+    pager.hidden = true;
+    meta.textContent = '';
+    panelEl.classList.remove('has-more', 'is-pinned');
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PANEL_PAGE_SIZE));
+  // Clamped rather than reset: a refresh that shortens a list shouldn't strand
+  // the panel on a page that no longer exists.
+  const page = Math.min(panelPages.get(panel.tableId) ?? 1, totalPages);
+  panelPages.set(panel.tableId, page);
+
+  const maxCount = rows.length > 0 ? Math.max(...rows.map((r) => r.count)) : 0;
+  renderRankTable(table, rows, panel.key, panel.header, page, maxCount);
+
+  meta.textContent = rows.length > 0 ? `${rows.length}` : '';
+  // Drives the "there is more below" fade at the panel's bottom edge. Only set
+  // when rows really are clipped, so a 3-row panel doesn't advertise depth it
+  // hasn't got.
+  panelEl.classList.toggle('has-more', rows.length > COLLAPSED_ROWS);
+  pager.hidden = totalPages <= 1;
+  if (totalPages > 1) {
+    panelEl.querySelector('[data-pager-info]').textContent = `${page} / ${totalPages}`;
+    panelEl.querySelector('[data-pager-prev]').disabled = page <= 1;
+    panelEl.querySelector('[data-pager-next]').disabled = page >= totalPages;
+  }
+}
+
+function renderAllPanels() {
+  for (const panel of PANELS) renderPanel(panel);
 }
 
 function chartColor(varName) {
@@ -90,60 +287,79 @@ function renderChart(dailySeries) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true } },
+      scales: {
+        y: { beginAtZero: true },
+        // Chart.js will happily print all 90 day labels at a 90-day range and
+        // rotate them into an unreadable comb. Same chart, legible axis.
+        x: { ticks: { autoSkip: true, maxTicksLimit: 12, maxRotation: 0 } },
+      },
     },
   });
 }
 
+// A 12-point trend line for the tiles that have a daily series behind them.
+// Built as an inline SVG rather than a second Chart.js instance - it carries
+// shape only, so an axis-less path is the whole form.
+function renderSparkline(el, values) {
+  el.replaceChildren();
+  if (values.length < 2) return;
+
+  const points = values.slice(-12);
+  const width = 100;
+  const height = 24;
+  const max = Math.max(...points, 1);
+  const step = width / (points.length - 1);
+  const coords = points.map((v, i) => [i * step, height - (v / max) * (height - 2) - 1]);
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('focusable', 'false');
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  line.setAttribute('points', coords.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' '));
+  line.setAttribute('class', 'spark-line');
+  // preserveAspectRatio="none" stretches the 100x24 box to whatever width the
+  // tile is, which would stretch the stroke with it - this keeps it 2px.
+  line.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(line);
+
+  const [lastX, lastY] = coords[coords.length - 1];
+  const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  dot.setAttribute('cx', lastX.toFixed(2));
+  dot.setAttribute('cy', lastY.toFixed(2));
+  dot.setAttribute('r', '2.5');
+  dot.setAttribute('class', 'spark-dot');
+  dot.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(dot);
+
+  el.appendChild(svg);
+}
+
+function renderActiveUsers(count) {
+  setStat('stat-active-users', formatCompact(count), count.toLocaleString());
+}
+
 function renderSummary(data) {
-  // `?? 0` rather than assuming the field: this dashboard and the RS3 backend
-  // deploy independently, and renderSummary paints every tile below too - a
-  // throw on an absent field would blank the whole overview.
-  document.getElementById('stat-active-users').textContent = (data.activeUsers ?? 0).toLocaleString();
-  document.getElementById('stat-visitors').textContent = data.uniqueVisitors.toLocaleString();
-  document.getElementById('stat-pageviews').textContent = data.totalPageviews.toLocaleString();
-  document.getElementById('stat-session-length').textContent = formatDuration(data.avgSessionSeconds);
+  // `?? 0` rather than assuming the field for the same deploy-skew reason as
+  // renderPanel's `?? []`.
+  renderActiveUsers(data.activeUsers ?? 0);
+  setStat('stat-visitors', formatCompact(data.uniqueVisitors), data.uniqueVisitors.toLocaleString());
+  setStat('stat-pageviews', formatCompact(data.totalPageviews), data.totalPageviews.toLocaleString());
+  setStat('stat-session-length', formatDuration(data.avgSessionSeconds));
+
   renderChart(data.dailySeries);
-  renderTable(document.getElementById('top-paths-table'), data.topPaths, 'path', 'Page');
-  renderTable(document.getElementById('top-referrers-table'), data.topReferrers, 'referrer', 'Referrer');
-  renderTable(document.getElementById('top-browsers-table'), data.topBrowsers, 'browser', 'Browser');
-  renderTable(document.getElementById('top-os-table'), data.topOperatingSystems, 'os', 'OS');
-  renderTable(document.getElementById('top-device-types-table'), data.topDeviceTypes, 'deviceType', 'Device');
+  renderSparkline(document.getElementById('spark-pageviews'), data.dailySeries.map((d) => d.pageviews));
+  renderSparkline(document.getElementById('spark-visitors'), data.dailySeries.map((d) => d.uniqueVisitors));
 }
 
 // Ever-incrementing usage counters (see RS3's deploy/migrations/008_usage_counters.sql
 // and routes/trackCounter.js) - all-time totals with no date-range concept
-// of their own, unlike everything renderSummary shows, so this is loaded
-// once (see initDashboard) rather than reloading on daysSelect's change
-// handler.
+// of their own, unlike everything renderSummary shows, so this is not reloaded
+// on daysSelect's change handler (see the change listener below).
 function renderUsage(data) {
-  document.getElementById('stat-karamja-toggled-off').textContent = data.karamjaToggledOffCount.toLocaleString();
-  document.getElementById('stat-import-relics-used').textContent = data.importRelicsUsedCount.toLocaleString();
-  renderTable(document.getElementById('top-region-picks-table'), data.regionPicks, 'region', 'Region');
-  renderTable(document.getElementById('top-region-combos-table'), data.regionCombos, 'combo', 'Combination');
-  renderTable(document.getElementById('top-league-relics-table'), data.leagueRelicPicks, 'relic', 'Relic');
-  renderTable(document.getElementById('top-drop-table-views-table'), data.dropTableViews, 'relic', 'Relic');
-  renderTable(document.getElementById('top-build-guide-views-table'), data.buildGuideViews, 'build', 'Build');
-  // Only the three tier picks are counted - the God Tier One power is derived
-  // from their colours rather than chosen, so it is never sent (see RS3's
-  // deploy/migrations/011_blessing_usage.sql). Defaults to [] so a dashboard
-  // deployed ahead of that migration renders "No data yet" instead of throwing
-  // on an absent field and blanking every table below it.
-  renderTable(document.getElementById('top-blessing-picks-table'), data.blessingPicks ?? [], 'blessing', 'Blessing');
-}
-
-async function loadUsage() {
-  try {
-    const res = await fetch(`${API_BASE}/usage`, { credentials: 'include' });
-    if (res.status === 401) {
-      showLogin();
-      return;
-    }
-    if (!res.ok) throw new Error(`usage failed: ${res.status}`);
-    renderUsage(await res.json());
-  } catch (err) {
-    console.error(err);
-  }
+  setStat('stat-karamja-toggled-off', formatCompact(data.karamjaToggledOffCount), data.karamjaToggledOffCount.toLocaleString());
+  setStat('stat-import-relics-used', formatCompact(data.importRelicsUsedCount), data.importRelicsUsedCount.toLocaleString());
 }
 
 function renderShortlinksTable(data) {
@@ -152,13 +368,10 @@ function renderShortlinksTable(data) {
   insertHeaderRow(table, ['Code', 'Created', 'Clicks', 'Last clicked']);
 
   if (data.items.length === 0) {
-    const row = table.insertRow();
-    const cell = row.insertCell();
-    cell.colSpan = 4;
-    cell.textContent = 'No short links yet';
+    emptyRow(table, 4, 'No short links yet');
   } else {
     for (const item of data.items) {
-      const tr = table.insertRow();
+      const tr = bodyOf(table).insertRow();
       const codeCell = tr.insertCell();
       const link = document.createElement('a');
       link.href = `/Leagues/s/${item.code}`;
@@ -176,6 +389,22 @@ function renderShortlinksTable(data) {
   document.getElementById('shortlinks-page-info').textContent = `Page ${data.page} of ${totalPages} (${data.total} total)`;
   shortlinksPrevButton.disabled = data.page <= 1;
   shortlinksNextButton.disabled = data.page >= totalPages;
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch(`${API_BASE}/usage`, { credentials: 'include' });
+    if (res.status === 401) {
+      showLogin();
+      return;
+    }
+    if (!res.ok) throw new Error(`usage failed: ${res.status}`);
+    state.usage = await res.json();
+    renderUsage(state.usage);
+    renderAllPanels();
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 async function loadShortlinks(page) {
@@ -208,7 +437,9 @@ async function loadSummary() {
       return false;
     }
     if (!res.ok) throw new Error(`summary failed: ${res.status}`);
-    renderSummary(await res.json());
+    state.summary = await res.json();
+    renderSummary(state.summary);
+    renderAllPanels();
     showDashboard();
     return true;
   } catch (err) {
@@ -219,15 +450,147 @@ async function loadSummary() {
   }
 }
 
+// Just the live gauge, from its own endpoint (see the RS3 repo's
+// routes/admin.js) - polling /summary for this would re-run ~8 Postgres
+// aggregations a minute to read a number held in that process's memory.
+async function loadActiveUsers() {
+  if (state.activeUsersUnavailable) return;
+  try {
+    const res = await fetch(`${API_BASE}/active-users`, { credentials: 'include' });
+    if (res.status === 401) {
+      showLogin();
+      return;
+    }
+    // The endpoint is newer than this page; if the RS3 service hasn't been
+    // deployed with it yet, stop polling and say so rather than failing every
+    // 60s in the console forever. "Auto-refresh data" still updates the tile.
+    if (res.status === 404) {
+      state.activeUsersUnavailable = true;
+      stopAutoActive();
+      autoActiveToggle.checked = false;
+      autoActiveToggle.disabled = true;
+      autoActiveToggle.closest('.switch').title =
+        'The backend does not expose /api/admin/active-users yet - deploy the RS3 Leagues service to enable this.';
+      persistToggles();
+      return;
+    }
+    if (!res.ok) throw new Error(`active-users failed: ${res.status}`);
+    const data = await res.json();
+    renderActiveUsers(data.activeUsers ?? 0);
+    if (state.summary) state.summary.activeUsers = data.activeUsers ?? 0;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function setLastUpdated(date) {
+  state.lastUpdatedAt = date;
+  paintLastUpdated();
+}
+
+function paintLastUpdated() {
+  if (!state.lastUpdatedAt) {
+    lastUpdatedEl.textContent = '';
+    return;
+  }
+  const seconds = Math.round((Date.now() - state.lastUpdatedAt) / 1000);
+  if (seconds < 10) lastUpdatedEl.textContent = 'Updated just now';
+  else if (seconds < 60) lastUpdatedEl.textContent = `Updated ${seconds}s ago`;
+  else lastUpdatedEl.textContent = `Updated ${Math.round(seconds / 60)}m ago`;
+}
+
+// Every data source at once - what the Refresh button and the "auto-refresh
+// data" timer both run. Guarded so a click mid-refresh (or a timer tick that
+// lands on a slow request) doesn't stack a second set of requests.
+async function refreshAll() {
+  if (state.refreshing) return;
+  state.refreshing = true;
+  refreshButton.classList.add('is-refreshing');
+  refreshButton.disabled = true;
+  try {
+    const loaded = await loadSummary();
+    if (loaded) {
+      // The page you were on, not page 1 - same reasoning as panelPages.
+      await Promise.all([loadShortlinks(shortlinksPage), loadUsage()]);
+      setLastUpdated(Date.now());
+    }
+  } finally {
+    state.refreshing = false;
+    refreshButton.classList.remove('is-refreshing');
+    refreshButton.disabled = false;
+  }
+}
+
+function startAutoActive() {
+  stopAutoActive();
+  dashboard.dataset.liveActive = 'on';
+  autoActiveTimer = setInterval(loadActiveUsers, AUTO_REFRESH_MS);
+  loadActiveUsers();
+}
+
+function stopAutoActive() {
+  if (autoActiveTimer) clearInterval(autoActiveTimer);
+  autoActiveTimer = null;
+  delete dashboard.dataset.liveActive;
+}
+
+function startAutoData() {
+  stopAutoData();
+  dashboard.dataset.liveData = 'on';
+  autoDataTimer = setInterval(refreshAll, AUTO_REFRESH_MS);
+}
+
+function stopAutoData() {
+  if (autoDataTimer) clearInterval(autoDataTimer);
+  autoDataTimer = null;
+  delete dashboard.dataset.liveData;
+}
+
+function persistToggles() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.autoActive, String(autoActiveToggle.checked));
+    localStorage.setItem(STORAGE_KEYS.autoData, String(autoDataToggle.checked));
+    localStorage.setItem(STORAGE_KEYS.design, classicToggle.checked ? 'classic' : 'modern');
+  } catch {
+    // Private-browsing / blocked storage - the toggles still work for this
+    // session, they just won't be remembered.
+  }
+}
+
+function applyDesign() {
+  dashboard.dataset.design = classicToggle.checked ? 'classic' : 'modern';
+  renderAllPanels();
+  // The chart's container changes size between the two layouts and Chart.js
+  // only re-reads that on its own resize observer, which won't have fired yet.
+  if (pageviewsChart) pageviewsChart.resize();
+}
+
+function restorePreferences() {
+  let stored = {};
+  try {
+    stored = {
+      design: localStorage.getItem(STORAGE_KEYS.design),
+      autoActive: localStorage.getItem(STORAGE_KEYS.autoActive),
+      autoData: localStorage.getItem(STORAGE_KEYS.autoData),
+    };
+  } catch {
+    stored = {};
+  }
+  classicToggle.checked = stored.design === 'classic';
+  autoActiveToggle.checked = stored.autoActive === 'true';
+  autoDataToggle.checked = stored.autoData === 'true';
+  dashboard.dataset.design = classicToggle.checked ? 'classic' : 'modern';
+}
+
 // Loads the summary, the first shortlinks page, and usage counters - used
-// on initial load and right after logging in. daysSelect's own change
-// handler only reloads the summary (see below), so browsing a shortlinks
-// page (or the usage counters, which have no date range at all) isn't lost
-// just from tweaking the date range.
+// on initial load and right after logging in.
 async function initDashboard() {
   const loaded = await loadSummary();
   if (loaded) {
     await Promise.all([loadShortlinks(1), loadUsage()]);
+    setLastUpdated(Date.now());
+    if (autoActiveToggle.checked) startAutoActive();
+    if (autoDataToggle.checked) startAutoData();
   }
 }
 
@@ -260,9 +623,62 @@ logoutButton.addEventListener('click', async () => {
   showLogin();
 });
 
-daysSelect.addEventListener('change', loadSummary);
+// Only the summary is date-scoped, so browsing a shortlinks page (or the usage
+// counters, which have no date range at all) isn't lost just from tweaking the
+// date range.
+daysSelect.addEventListener('change', async () => {
+  await loadSummary();
+  setLastUpdated(Date.now());
+});
+
+refreshButton.addEventListener('click', refreshAll);
+
+autoActiveToggle.addEventListener('change', () => {
+  if (autoActiveToggle.checked) startAutoActive();
+  else stopAutoActive();
+  persistToggles();
+});
+
+autoDataToggle.addEventListener('change', () => {
+  if (autoDataToggle.checked) startAutoData();
+  else stopAutoData();
+  persistToggles();
+});
+
+classicToggle.addEventListener('change', () => {
+  applyDesign();
+  persistToggles();
+});
+
+// Delegated so the eleven panels don't need eleven pairs of listeners, and so
+// re-rendering a panel's contents can't detach them.
+dashboard.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-pager-prev], [data-pager-next]');
+  if (!button) return;
+  const panelEl = button.closest('[data-panel]');
+  const table = panelEl.querySelector('table');
+  const panel = PANELS.find((p) => p.tableId === table.id);
+  if (!panel) return;
+  const delta = 'pagerNext' in button.dataset ? 1 : -1;
+  panelPages.set(panel.tableId, Math.max(1, (panelPages.get(panel.tableId) ?? 1) + delta));
+  renderPanel(panel);
+});
+
+// Touch and keyboard have no hover, so a panel can also be pinned open. Click
+// anywhere on it that isn't a pager button or a link.
+dashboard.addEventListener('click', (event) => {
+  if (event.target.closest('[data-pager-prev], [data-pager-next], a')) return;
+  const panelEl = event.target.closest('[data-panel]');
+  if (!panelEl || isClassic()) return;
+  panelEl.classList.toggle('is-pinned');
+});
+
 shortlinksPrevButton.addEventListener('click', () => loadShortlinks(shortlinksPage - 1));
 shortlinksNextButton.addEventListener('click', () => loadShortlinks(shortlinksPage + 1));
+
+setInterval(paintLastUpdated, CLOCK_TICK_MS);
+
+restorePreferences();
 
 // A valid session cookie from an earlier visit means the dashboard can load
 // straight away - only fall back to the login form on a 401. Loaded as a
