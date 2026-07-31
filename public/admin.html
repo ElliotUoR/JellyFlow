@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <title>JellyFlow — Admin</title>
+
+  <!-- Reachable by a crawl (index.html links here from both the nav and the
+       footer) and Disallow'd in robots.txt, but robots.txt only stops the
+       fetch - a URL discovered through links can still be listed without one.
+       noindex is what keeps the login form out of results outright. -->
+  <meta name="robots" content="noindex, nofollow" />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>

@@ -38,12 +38,30 @@ every panel a uniform height - and wrap to their full text once expanded, so
 an opened panel never hides what it is showing. The traffic panels are capped
 server-side by `TOP_N` in the RS3 repo's `routes/admin.js`.
 
+## Crawling and indexing
+
+`robots.txt` and `sitemap.xml` live here rather than in the project they
+describe, because **crawlers only ever read robots.txt from the domain root**
+(`https://jellyflow.xyz/robots.txt`) and this repo owns `/`. A per-project
+file such as `/Leagues/robots.txt` is never requested, so any `Sitemap:` line
+inside one is silently ignored.
+
+So `public/robots.txt` declares every project's sitemap - each project still
+owns and deploys its own. **Add a `Sitemap:` line here when a new project goes
+up**, or that project's URLs have no discoverable sitemap at all.
+
+`admin.html` is `Disallow`'d there *and* carries `noindex`: robots.txt only
+stops the fetch, while a URL discovered through links (the landing page links
+to it from both the nav and the footer) can still be listed without one.
+
 ## Structure
 
 ```
 public/           the actual site (nginx serves this directory as-is)
   index.html
   style.css
+  robots.txt      domain-root robots.txt - declares every project's sitemap
+  sitemap.xml     the landing page only; /Leagues/ has its own
   admin.html      analytics dashboard - login form + charts (Chart.js via CDN)
   admin.js        talks to /Leagues/api/admin/* (see RS3 Leagues repo)
 deploy/

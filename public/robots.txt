@@ -1,0 +1,20 @@
+# Served at https://jellyflow.xyz/robots.txt - the only robots.txt any crawler
+# reads for this domain. Crawlers fetch it from the domain root and nowhere
+# else, so a per-project file like /Leagues/robots.txt is never requested and
+# any Sitemap: line inside one is silently ignored. That is why every project's
+# sitemap is declared here rather than in the project that owns it.
+
+User-agent: *
+Allow: /
+
+# The password-gated analytics dashboard. It is linked from the landing page's
+# nav and footer, so a crawler reaches it by following ordinary links. Nothing
+# is readable without the session cookie, but a login form has no business in
+# a search index.
+Disallow: /admin.html
+
+# One line per project on this domain. Each project still owns, generates and
+# deploys its own sitemap - this file is only the single discoverable place
+# that points at them. Add a line here when a new project goes up.
+Sitemap: https://jellyflow.xyz/sitemap.xml
+Sitemap: https://jellyflow.xyz/Leagues/sitemap.xml

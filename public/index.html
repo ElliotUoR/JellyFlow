@@ -4,7 +4,35 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <title>JellyFlow</title>
+
+  <!-- The title carried the brand name and nothing else, so the only query
+       this page could ever match was "jellyflow" - which is why it surfaced
+       for the domain and nothing else. -->
+  <title>JellyFlow — RS3 Leagues II planner and other projects</title>
+
+  <!-- Without this Google builds the snippet out of whatever visible text it
+       finds, which is how "Leagues Planner RS3 Leagues region & gear planner
+       -> Site analytics" (the card text and the footer link, run together)
+       ended up as the search result description. -->
+  <meta
+    name="description"
+    content="JellyFlow hosts the RS3 Leagues II: Equilibrium planner - pick region unlocks, build relic combos and plan gear loadouts for every combat style."
+  />
+
+  <!-- http://jellyflow.xyz and https://jellyflow.xyz are indexed as two
+       separate results. Caddy already 308s http to https, so the http entry is
+       stale, but a canonical is what actually consolidates the ranking signal
+       onto one URL instead of splitting it across both. -->
+  <link rel="canonical" href="https://jellyflow.xyz/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="JellyFlow — RS3 Leagues II planner and other projects" />
+  <meta
+    property="og:description"
+    content="JellyFlow hosts the RS3 Leagues II: Equilibrium planner - pick region unlocks, build relic combos and plan gear loadouts for every combat style."
+  />
+  <meta property="og:url" content="https://jellyflow.xyz/" />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
