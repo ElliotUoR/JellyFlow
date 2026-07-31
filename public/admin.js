@@ -120,6 +120,12 @@ function renderUsage(data) {
   renderTable(document.getElementById('top-league-relics-table'), data.leagueRelicPicks, 'relic', 'Relic');
   renderTable(document.getElementById('top-drop-table-views-table'), data.dropTableViews, 'relic', 'Relic');
   renderTable(document.getElementById('top-build-guide-views-table'), data.buildGuideViews, 'build', 'Build');
+  // Only the three tier picks are counted - the God Tier One power is derived
+  // from their colours rather than chosen, so it is never sent (see RS3's
+  // deploy/migrations/011_blessing_usage.sql). Defaults to [] so a dashboard
+  // deployed ahead of that migration renders "No data yet" instead of throwing
+  // on an absent field and blanking every table below it.
+  renderTable(document.getElementById('top-blessing-picks-table'), data.blessingPicks ?? [], 'blessing', 'Blessing');
 }
 
 async function loadUsage() {
