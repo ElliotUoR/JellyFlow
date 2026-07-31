@@ -96,6 +96,10 @@ function renderChart(dailySeries) {
 }
 
 function renderSummary(data) {
+  // `?? 0` rather than assuming the field: this dashboard and the RS3 backend
+  // deploy independently, and renderSummary paints every tile below too - a
+  // throw on an absent field would blank the whole overview.
+  document.getElementById('stat-active-users').textContent = (data.activeUsers ?? 0).toLocaleString();
   document.getElementById('stat-visitors').textContent = data.uniqueVisitors.toLocaleString();
   document.getElementById('stat-pageviews').textContent = data.totalPageviews.toLocaleString();
   document.getElementById('stat-session-length').textContent = formatDuration(data.avgSessionSeconds);

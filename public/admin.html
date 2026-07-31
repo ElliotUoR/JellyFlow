@@ -47,6 +47,12 @@
       </div>
 
       <div class="stat-tiles">
+        <!-- Live "right now" figure - unlike every other tile here it is not
+             scoped to the selected date range, hence the explicit label. -->
+        <div class="stat-tile">
+          <span class="stat-value" id="stat-active-users">—</span>
+          <span class="stat-label">Active now <span class="stat-live-dot" aria-hidden="true"></span></span>
+        </div>
         <div class="stat-tile">
           <span class="stat-value" id="stat-visitors">—</span>
           <span class="stat-label">Unique visitors</span>

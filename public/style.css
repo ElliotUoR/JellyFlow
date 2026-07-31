@@ -368,6 +368,29 @@ a {
   opacity: 0.75;
 }
 
+/* Marks the one tile that is live rather than scoped to the date range. */
+.stat-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #3fbf6f;
+  vertical-align: middle;
+  animation: stat-live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes stat-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-live-dot {
+    animation: none;
+  }
+}
+
 .chart-panel {
   padding: 20px 24px;
   border: 1px solid var(--border);
