@@ -31,10 +31,12 @@ rolled up.
   the CSS and which row renderer runs in `admin.js` differ - so the toggle
   costs no extra requests. Preferences persist in `localStorage`.
 
-Panels show their top 5 rows and expand over their neighbours on hover (or
-click, for touch/keyboard) without reflowing the grid; lists longer than a
-page get an in-panel pager. The traffic panels are capped server-side by
-`TOP_N` in the RS3 repo's `routes/admin.js`.
+Panels show their top 5 rows and expand over their neighbours on hover or
+click without reflowing the grid; lists longer than a page get an in-panel
+pager. Row labels are ellipsised only while collapsed - that is what keeps
+every panel a uniform height - and wrap to their full text once expanded, so
+an opened panel never hides what it is showing. The traffic panels are capped
+server-side by `TOP_N` in the RS3 repo's `routes/admin.js`.
 
 ## Structure
 

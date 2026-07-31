@@ -866,6 +866,19 @@ a {
   white-space: nowrap;
 }
 
+/* Once a panel is open every label is shown in full - a row that is still
+   clipped in an expanded panel defeats the point of expanding it. Only the
+   collapsed state ellipsises, where the uniform 38px row is what keeps the
+   grid of panels aligned. overflow-wrap breaks the long unspaced strings
+   (referrer URLs, region combos) that would otherwise still overflow. */
+#dashboard[data-design='modern'] .chart-panel[data-panel]:hover .row-label,
+#dashboard[data-design='modern'] .chart-panel[data-panel]:focus-within .row-label,
+#dashboard[data-design='modern'] .chart-panel[data-panel].is-pinned .row-label {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* Magnitude meter: one hue, the track a low-alpha step of the same ramp, so
    fill-vs-track reads as the same scale rather than two categories. Square at
    the baseline, rounded at the data end. */
