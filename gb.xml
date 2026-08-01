@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The landing page only. /Leagues/ has its own sitemap at
+  https://jellyflow.xyz/Leagues/sitemap.xml, owned and deployed by the RS3
+  Leagues Region Helper repo - both are declared in robots.txt, so each
+  project keeps ownership of its own URLs and this file does not need
+  touching when one of them changes.
+
+  admin.html is deliberately absent: it is Disallow'd in robots.txt and
+  carries noindex, so listing it here would only send mixed signals.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://jellyflow.xyz/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>
