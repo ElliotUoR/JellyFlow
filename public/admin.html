@@ -336,6 +336,66 @@
           </div>
         </div>
       </div>
+
+      <!-- Tier lists. Player-submitted rankings (see the RS3 site's Tier Lists
+           tab) - the aggregate analysis, plus every individual list rebuilt
+           from the stored JSON. -->
+      <div class="dashboard-header section-header">
+        <h2>Tier lists</h2>
+        <span class="page-info">All-time - not scoped to the date range above</span>
+      </div>
+
+      <div class="tier-type-toggle" role="tablist" aria-label="Tier list type">
+        <button type="button" class="tier-type-btn active" data-tier-type="blessings" role="tab" aria-selected="true">
+          Blessings
+        </button>
+        <button type="button" class="tier-type-btn" data-tier-type="relics" role="tab" aria-selected="false">
+          League relics
+        </button>
+      </div>
+
+      <div class="stat-tiles">
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value" id="stat-tier-lists">&mdash;</span>
+          <span class="stat-label">Lists submitted</span>
+        </div>
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value" id="stat-tier-avg-placed">&mdash;</span>
+          <span class="stat-label">Entries ranked per list</span>
+        </div>
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value stat-value-small" id="stat-tier-divisive">&mdash;</span>
+          <span class="stat-label">Most divisive</span>
+        </div>
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value stat-value-small" id="stat-tier-agreed">&mdash;</span>
+          <span class="stat-label">Most agreed on</span>
+        </div>
+      </div>
+
+      <div class="chart-panel" data-live-scope="data">
+        <div class="panel-inner">
+          <div class="panel-head">
+            <h2>Community ranking</h2>
+            <span class="page-info">Average across every submitted list. 7 = top tier, 1 = bottom.</span>
+          </div>
+          <div class="panel-body">
+            <table id="tier-item-stats-table" class="stats-table"></table>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-panel" data-live-scope="data">
+        <div class="panel-inner">
+          <div class="panel-head">
+            <h2>Submitted lists</h2>
+            <span id="tier-lists-count" class="page-info"></span>
+          </div>
+          <div class="panel-body">
+            <div id="tier-lists-container"></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <p id="dashboard-error" class="form-error" hidden></p>

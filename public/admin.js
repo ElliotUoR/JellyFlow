@@ -584,10 +584,227 @@ function restorePreferences() {
 
 // Loads the summary, the first shortlinks page, and usage counters - used
 // on initial load and right after logging in.
+// ─────────────────────────────────────────────────────────────────────────
+// Tier lists
+//
+// Two views of the same data: the aggregate ranking (how the community rates
+// each blessing/relic on average), and every individual list rebuilt from its
+// stored placements.
+//
+// Scores are 7 (top row) down to 1 (bottom). Row LABELS are renamable by their
+// author, so nothing here reads them - a list that renames "S" to "Must pick"
+// still averages against everyone else by row position. The labels are shown
+// only when rebuilding that author's own list, where they are the point.
+// ─────────────────────────────────────────────────────────────────────────
+const TIER_ROW_HUES = [165, 140, 95, 45, 25, 5, 220];
+const tierTypeButtons = document.querySelectorAll('[data-tier-type]');
+const tierItemStatsTable = document.getElementById('tier-item-stats-table');
+const tierListsContainer = document.getElementById('tier-lists-container');
+const tierListsCount = document.getElementById('tier-lists-count');
+let tierType = 'blessings';
+
+// Built with DOM nodes and textContent, never innerHTML - author names, angle
+// lines and row labels are all visitor-supplied and arrive here unescaped, the
+// same rule renderRankedTable above follows for paths and referrers.
+function cell(row, text, className) {
+  const td = row.insertCell();
+  td.textContent = text;
+  if (className) td.className = className;
+  return td;
+}
+
+function renderTierItemStats(stats) {
+  tierItemStatsTable.innerHTML = '';
+  if (stats.perItem.length === 0) {
+    const body = tierItemStatsTable.createTBody();
+    const td = body.insertRow().insertCell();
+    td.className = 'empty-cell';
+    td.textContent = 'No lists submitted yet.';
+    return;
+  }
+
+  const head = tierItemStatsTable.createTHead().insertRow();
+  for (const label of ['Entry', 'Avg', 'Ranked', 'Top tier', 'Unsorted', 'Spread', 'Our grade']) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    head.appendChild(th);
+  }
+
+  const body = tierItemStatsTable.createTBody();
+  for (const item of stats.perItem) {
+    const row = body.insertRow();
+    cell(row, item.name);
+
+    // A bar makes the ordering readable at a glance; the number stays for
+    // anyone comparing two entries properly.
+    const avg = row.insertCell();
+    const bar = document.createElement('span');
+    bar.className = 'tier-bar';
+    const fill = document.createElement('span');
+    fill.className = 'tier-bar-fill';
+    fill.style.width = `${item.averageScore == null ? 0 : ((item.averageScore / 7) * 100).toFixed(0)}%`;
+    bar.appendChild(fill);
+    const value = document.createElement('span');
+    value.className = 'tier-bar-value';
+    value.textContent = item.averageScore == null ? '—' : item.averageScore.toFixed(2);
+    avg.append(bar, value);
+
+    cell(row, item.ranked);
+    cell(row, `${item.topPct}%`);
+    cell(row, `${item.unsortedPct}%`);
+    cell(row, item.spread == null ? '—' : item.spread.toFixed(2));
+    cell(row, item.curatedGrade ?? '—');
+  }
+}
+
+function renderTierLists(lists) {
+  tierListsCount.textContent = `${lists.length} list${lists.length === 1 ? '' : 's'}`;
+  tierListsContainer.innerHTML = '';
+  if (lists.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-cell';
+    empty.textContent = 'No lists submitted yet.';
+    tierListsContainer.appendChild(empty);
+    return;
+  }
+
+  for (const list of lists) {
+    const article = document.createElement('article');
+    article.className = `tier-mini${list.hidden ? ' is-hidden' : ''}`;
+
+    const header = document.createElement('header');
+    header.className = 'tier-mini-head';
+    const author = document.createElement('strong');
+    // The name is optional on the maker, so an unnamed list is titled "My
+    // <noun> tier list" there. Here it is one row among many, where "(unnamed)"
+    // is more useful to scan than seven identical "My blessing tier list"s.
+    author.textContent = list.authorName || '(unnamed)';
+    if (!list.authorName) author.classList.add('tier-mini-unnamed');
+    header.appendChild(author);
+    if (list.angle) {
+      const angle = document.createElement('span');
+      angle.className = 'tier-mini-angle';
+      angle.textContent = list.angle;
+      header.appendChild(angle);
+    }
+    const when = document.createElement('span');
+    when.className = 'tier-mini-meta';
+    when.textContent = new Date(list.createdAt).toLocaleDateString();
+    header.appendChild(when);
+
+    const link = document.createElement('a');
+    link.className = 'tier-mini-link';
+    link.href = `/Leagues/tier-list/${tierType}/${encodeURIComponent(list.code)}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'open';
+    header.appendChild(link);
+
+    const hide = document.createElement('button');
+    hide.type = 'button';
+    hide.className = 'tier-mini-hide';
+    hide.dataset.hideCode = list.code;
+    hide.dataset.hidden = String(list.hidden);
+    hide.textContent = list.hidden ? 'Un-hide' : 'Hide';
+    header.appendChild(hide);
+
+    // The author's own ranking, rebuilt - their row names included, since on
+    // one specific list the labels are the point.
+    const rows = document.createElement('div');
+    rows.className = 'tier-mini-rows';
+    list.rowLabels.forEach((label, index) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'tier-mini-row';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'tier-mini-label';
+      labelEl.style.setProperty('--tier-hue', TIER_ROW_HUES[index] ?? 220);
+      labelEl.textContent = label;
+      rowEl.appendChild(labelEl);
+
+      const entries = document.createElement('span');
+      entries.className = 'tier-mini-entries';
+      const names = Object.entries(list.placements)
+        .filter(([, row]) => row === index)
+        .map(([name]) => name);
+      if (names.length === 0) {
+        const dash = document.createElement('span');
+        dash.className = 'tier-mini-empty';
+        dash.textContent = '—';
+        entries.appendChild(dash);
+      } else {
+        for (const name of names) {
+          const chip = document.createElement('span');
+          chip.className = 'tier-mini-chip';
+          chip.textContent = name;
+          entries.appendChild(chip);
+        }
+      }
+      rowEl.appendChild(entries);
+      rows.append(rowEl);
+    });
+
+    article.append(header, rows);
+    tierListsContainer.appendChild(article);
+  }
+}
+
+async function loadTierLists() {
+  try {
+    const res = await fetch(`${API_BASE}/tier-lists?type=${tierType}`, { credentials: 'include' });
+    if (res.status === 401) {
+      showLogin();
+      return;
+    }
+    if (!res.ok) throw new Error(`tier lists failed: ${res.status}`);
+    const data = await res.json();
+    document.getElementById('stat-tier-lists').textContent = data.stats.totalLists;
+    document.getElementById('stat-tier-avg-placed').textContent = data.stats.averagePlaced;
+    document.getElementById('stat-tier-divisive').textContent = data.stats.mostDivisive?.name ?? '—';
+    document.getElementById('stat-tier-agreed').textContent = data.stats.mostAgreed?.name ?? '—';
+    renderTierItemStats(data.stats);
+    renderTierLists(data.lists);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+for (const button of tierTypeButtons) {
+  button.addEventListener('click', () => {
+    tierType = button.dataset.tierType;
+    for (const other of tierTypeButtons) {
+      const active = other === button;
+      other.classList.toggle('active', active);
+      other.setAttribute('aria-selected', String(active));
+    }
+    loadTierLists();
+  });
+}
+
+// Hiding is delegated because the list is re-rendered on every load.
+tierListsContainer.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-hide-code]');
+  if (!button) return;
+  const hidden = button.dataset.hidden !== 'true';
+  button.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/tier-lists/${encodeURIComponent(button.dataset.hideCode)}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hidden }),
+    });
+    if (!res.ok) throw new Error(`hide failed: ${res.status}`);
+    await loadTierLists();
+  } catch (err) {
+    console.error(err);
+    button.disabled = false;
+  }
+});
+
 async function initDashboard() {
   const loaded = await loadSummary();
   if (loaded) {
-    await Promise.all([loadShortlinks(1), loadUsage()]);
+    await Promise.all([loadShortlinks(1), loadUsage(), loadTierLists()]);
     setLastUpdated(Date.now());
     if (autoActiveToggle.checked) startAutoActive();
     if (autoDataToggle.checked) startAutoData();
