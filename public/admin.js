@@ -658,7 +658,9 @@ function renderTierItemStats(stats) {
 }
 
 function renderTierLists(lists) {
-  tierListsCount.textContent = `${lists.length} list${lists.length === 1 ? '' : 's'}`;
+  const refused = lists.filter((list) => list.refused).length;
+  tierListsCount.textContent =
+    `${lists.length} list${lists.length === 1 ? '' : 's'}` + (refused > 0 ? ` - ${refused} refused` : '');
   tierListsContainer.innerHTML = '';
   if (lists.length === 0) {
     const empty = document.createElement('p');
@@ -670,7 +672,7 @@ function renderTierLists(lists) {
 
   for (const list of lists) {
     const article = document.createElement('article');
-    article.className = `tier-mini${list.hidden ? ' is-hidden' : ''}`;
+    article.className = `tier-mini${list.hidden ? ' is-hidden' : ''}${list.refused ? ' is-refused' : ''}`;
 
     const header = document.createElement('header');
     header.className = 'tier-mini-head';
@@ -692,6 +694,13 @@ function renderTierLists(lists) {
     when.textContent = new Date(list.createdAt).toLocaleDateString();
     header.appendChild(when);
 
+    if (list.refused) {
+      const badge = document.createElement('span');
+      badge.className = 'tier-mini-badge';
+      badge.textContent = 'not counted';
+      header.appendChild(badge);
+    }
+
     const link = document.createElement('a');
     link.className = 'tier-mini-link';
     link.href = `/Leagues/tier-list/${tierType}/${encodeURIComponent(list.code)}`;
@@ -700,11 +709,26 @@ function renderTierLists(lists) {
     link.textContent = 'open';
     header.appendChild(link);
 
+    // Two independent flags. Hide takes the list away from visitors; Refuse
+    // leaves it readable but drops it out of the community ranking - a joke
+    // list is worth refusing without being worth hiding.
+    const refuse = document.createElement('button');
+    refuse.type = 'button';
+    refuse.className = 'tier-mini-refuse';
+    refuse.dataset.flagCode = list.code;
+    refuse.dataset.flag = 'refused';
+    refuse.dataset.value = String(list.refused);
+    refuse.title = 'Excluded from the community ranking, but still viewable';
+    refuse.textContent = list.refused ? 'Un-refuse' : 'Refuse';
+    header.appendChild(refuse);
+
     const hide = document.createElement('button');
     hide.type = 'button';
     hide.className = 'tier-mini-hide';
-    hide.dataset.hideCode = list.code;
-    hide.dataset.hidden = String(list.hidden);
+    hide.dataset.flagCode = list.code;
+    hide.dataset.flag = 'hidden';
+    hide.dataset.value = String(list.hidden);
+    hide.title = 'Removes the page and its preview image from visitors';
     hide.textContent = list.hidden ? 'Un-hide' : 'Hide';
     header.appendChild(hide);
 
@@ -757,7 +781,14 @@ async function loadTierLists() {
     }
     if (!res.ok) throw new Error(`tier lists failed: ${res.status}`);
     const data = await res.json();
+    // The tile counts what the ranking is BUILT from, so a refused list must
+    // not inflate it - otherwise the headline and the averages disagree.
     document.getElementById('stat-tier-lists').textContent = data.stats.totalLists;
+    const refusedNote = document.getElementById('stat-tier-lists-note');
+    if (refusedNote) {
+      refusedNote.textContent =
+        data.stats.refusedCount > 0 ? `Counted - ${data.stats.refusedCount} refused` : 'Lists submitted';
+    }
     document.getElementById('stat-tier-avg-placed').textContent = data.stats.averagePlaced;
     document.getElementById('stat-tier-divisive').textContent = data.stats.mostDivisive?.name ?? '—';
     document.getElementById('stat-tier-agreed').textContent = data.stats.mostAgreed?.name ?? '—';
@@ -780,20 +811,23 @@ for (const button of tierTypeButtons) {
   });
 }
 
-// Hiding is delegated because the list is re-rendered on every load.
+// Delegated because the list is re-rendered on every load. One handler covers
+// both flags - they differ only in which key the PATCH carries.
 tierListsContainer.addEventListener('click', async (event) => {
-  const button = event.target.closest('[data-hide-code]');
+  const button = event.target.closest('[data-flag-code]');
   if (!button) return;
-  const hidden = button.dataset.hidden !== 'true';
+  const next = button.dataset.value !== 'true';
   button.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/tier-lists/${encodeURIComponent(button.dataset.hideCode)}`, {
+    const res = await fetch(`${API_BASE}/tier-lists/${encodeURIComponent(button.dataset.flagCode)}`, {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hidden }),
+      body: JSON.stringify({ [button.dataset.flag]: next }),
     });
-    if (!res.ok) throw new Error(`hide failed: ${res.status}`);
+    if (!res.ok) throw new Error(`${button.dataset.flag} failed: ${res.status}`);
+    // Refusing changes the averages, so the whole panel reloads rather than
+    // just this card.
     await loadTierLists();
   } catch (err) {
     console.error(err);

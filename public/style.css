@@ -1229,3 +1229,41 @@ a {
   font-weight: 400;
   opacity: 0.6;
 }
+
+/* A refused list still renders in full - it is only excluded from the maths -
+   so it is marked rather than dimmed into unreadability. */
+.tier-mini.is-refused {
+  border-color: rgba(255, 143, 92, 0.5);
+}
+
+.tier-mini-badge {
+  padding: 1px 8px;
+  border: 1px solid rgba(255, 143, 92, 0.5);
+  border-radius: 999px;
+  color: #ff8f5c;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tier-mini-refuse {
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid var(--border, #2e303a);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tier-mini-refuse:hover {
+  border-color: #ff8f5c;
+  color: #ff8f5c;
+}
+
+/* Only the first of the trailing controls pushes right. */
+.tier-mini-refuse + .tier-mini-hide,
+.tier-mini-link + .tier-mini-refuse {
+  margin-left: 0;
+}
