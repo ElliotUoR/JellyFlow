@@ -802,6 +802,12 @@ a {
   font-size: 14px;
 }
 
+/* The row-count pill is blanked for an empty panel, and its padding alone
+   would still draw a small blob next to the heading. */
+#dashboard[data-design='modern'] .panel-meta:empty {
+  display: none;
+}
+
 #dashboard[data-design='modern'] .panel-meta {
   flex: none;
   padding: 1px 7px;
@@ -1043,9 +1049,13 @@ a {
 }
 
 /* The usage section has only two tiles; left on the shared auto-fit track they
-   stretch to half the page each and dwarf the four traffic tiles above. */
+   stretch to half the page each and dwarf the four traffic tiles above.
+   auto-fit rather than a fixed 2 columns, and min() on the floor, so on a
+   phone they stack instead of pushing two 200px columns past the screen edge;
+   with only two tiles the empty tracks collapse, so on desktop it is the same
+   pair of 340px tiles as before. */
 #dashboard[data-design='modern'] .stat-tiles:has(> .stat-tile:nth-child(2):last-child) {
-  grid-template-columns: repeat(2, minmax(200px, 340px));
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 340px));
 }
 
 #dashboard[data-design='modern'] .stat-label {
@@ -1334,4 +1344,10 @@ a {
 .tier-mini-refuse + .tier-mini-hide,
 .tier-mini-link + .tier-mini-refuse {
   margin-left: 0;
+}
+
+/* Seven columns don't fit a phone. The ranking scrolls inside its panel
+   rather than widening the whole page. */
+.panel-body:has(> #tier-item-stats-table) {
+  overflow-x: auto;
 }
