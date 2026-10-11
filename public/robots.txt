@@ -18,3 +18,4 @@ Disallow: /admin.html
 # that points at them. Add a line here when a new project goes up.
 Sitemap: https://jellyflow.xyz/sitemap.xml
 Sitemap: https://jellyflow.xyz/Leagues/sitemap.xml
+Sitemap: https://jellyflow.xyz/moviebattles/sitemap.xml
