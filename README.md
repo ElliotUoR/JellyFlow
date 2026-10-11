@@ -1,8 +1,10 @@
 # JellyFlow
 
 Landing page for jellyflow.xyz - lists the projects hosted on the domain.
-Currently just links out to the RS3 Leagues Region Helper ("Leagues
-Planner"), deployed separately at `/Leagues`. May do more in the future.
+Currently links out to the RS3 Leagues Region Helper ("Leagues Planner"),
+deployed separately at `/Leagues`, and Movie Battles, a card battler where
+you link films through the people in them, deployed separately at
+`/moviebattles`. May do more in the future.
 
 Purely static (`public/index.html`, `public/style.css`) - no build step, no
 backend of its own. `admin.html` is a password-protected analytics
@@ -14,10 +16,43 @@ See that repo's `server/src/routes/admin.js` and
 `server/src/lib/analyticsRollup.js` for how the data is collected and
 rolled up.
 
+### Site tabs
+
+Both projects send their analytics to that same service (Movie Battles
+tags its events `site: 'moviebattles'`), and the dashboard shows one site at
+a time, never mixed. The **Leagues Planner / Movie Battles** tabs at the
+front of the toolbar pick which:
+
+- The shared overview (stat tiles, chart, top pages, referrers, browsers,
+  OS, devices) is fetched with `?site=` for the selected site - the
+  active-users poll and the auto-refresh timers included.
+- Each tab also has its own section, and only fetches that: **Region &
+  relic usage**, **Short links** and **Tier lists** on the Leagues tab;
+  **Runs** (runs started, finished and won, plus runs by difficulty, acts
+  reached and run endings) on the Movie Battles tab, from
+  `/usage?site=moviebattles`. Like the Leagues counters, the run numbers
+  are all-time totals rather than scoped to the date range.
+- Each site's last response is kept for the visit, so switching back to a
+  tab shows its numbers straight away while the refresh runs. The selected
+  tab persists in `localStorage` with the other preferences.
+
+The two repos deploy independently, so the page copes with an RS3 service
+older than the tabs: one that ignores `?site=` answers with Leagues
+numbers, and the dashboard spots the missing `site` field in the response
+and says so above the tiles rather than passing them off as Movie Battles.
+
+### Date range
+
+7, 30 or 90 days, or **All time**, which asks for `days=all` and starts at
+the selected site's first day with data (shown above the chart). Past 90
+daily points the chart drops its point markers and its tooltip follows the
+cursor instead. An RS3 service without All time falls back to its default
+30 days, and the dashboard says that too.
+
 ### Dashboard controls
 
-- **Refresh** reloads every panel on demand; **auto-refresh data** does the
-  same on a 60s timer.
+- **Refresh** reloads every panel on the selected tab on demand;
+  **auto-refresh data** does the same on a 60s timer.
 - **Auto-refresh active users** polls only `GET /Leagues/api/admin/active-users`
   on a 60s timer. That endpoint exists so the live gauge can be polled without
   re-running `/summary`'s Postgres aggregations every minute - **it ships in
@@ -61,7 +96,7 @@ public/           the actual site (nginx serves this directory as-is)
   index.html
   style.css
   robots.txt      domain-root robots.txt - declares every project's sitemap
-  sitemap.xml     the landing page only; /Leagues/ has its own
+  sitemap.xml     the landing page only; /Leagues/ and /moviebattles/ have their own
   admin.html      analytics dashboard - login form + charts (Chart.js via CDN)
   admin.js        talks to /Leagues/api/admin/* (see RS3 Leagues repo)
 deploy/
@@ -72,7 +107,8 @@ deploy/
 ## Deploying
 
 This site shares a Hetzner server and a single Caddy instance with every
-other project on jellyflow.xyz (currently just the Leagues Planner). The
+other project on jellyflow.xyz (currently the Leagues Planner and Movie
+Battles). The
 one-time shared network/Caddy setup (Docker `web` network, the canonical
 `jellyflow.xyz { import ... }` block, the shared `conf.d` directory) is
 documented in the RS3 Leagues Region Helper repo's `docs/deployment.md` -
@@ -109,4 +145,7 @@ Actions): `HETZNER_HOST`, `HETZNER_DEPLOY_USER`, `HETZNER_SSH_KEY`.
 ## Adding a new project to the list
 
 Add a new `<li class="project-card">`-style entry to `public/index.html`
-pointing at wherever that project is deployed (e.g. `/NewProject/`).
+pointing at wherever that project is deployed (e.g. `/NewProject/`), bump
+the "N projects hosted on this domain" count above it, and add the
+project's `Sitemap:` line to `public/robots.txt` (see Crawling and
+indexing).
