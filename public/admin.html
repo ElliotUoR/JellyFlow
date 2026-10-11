@@ -47,11 +47,28 @@
     <section id="dashboard" data-design="modern" hidden>
       <div class="toolbar">
         <div class="toolbar-group">
-          <h2 class="toolbar-title">Overview</h2>
+          <!-- The top-level switch: which site every number on the page belongs
+               to. The shared overview below (tiles, chart, traffic panels) is
+               re-fetched with ?site= for the selected one, and the sections
+               that only make sense for one site are shown only on its tab.
+               Lives in the sticky toolbar so it stays in reach (and in view)
+               however far down the page you are. -->
+          <h2 class="sr-only">Overview</h2>
+          <div class="site-tabs" role="tablist" aria-label="Site">
+            <button type="button" class="site-tab active" data-site="leagues" role="tab" aria-selected="true">
+              Leagues Planner
+            </button>
+            <button type="button" class="site-tab" data-site="moviebattles" role="tab" aria-selected="false">
+              Movie Battles
+            </button>
+          </div>
+          <!-- "all" asks the backend for everything from the site's first day
+               with data (see the RS3 repo's routes/admin.js). -->
           <select id="days-select" aria-label="Date range">
             <option value="7">Last 7 days</option>
             <option value="30" selected>Last 30 days</option>
             <option value="90">Last 90 days</option>
+            <option value="all">All time</option>
           </select>
           <button type="button" id="refresh-button" class="refresh-button">
             <span class="refresh-icon" aria-hidden="true"></span>
@@ -79,6 +96,12 @@
           <button type="button" id="logout-button" class="link-button">Log out</button>
         </div>
       </div>
+
+      <!-- Set by admin.js when the response doesn't match what was asked for -
+           a backend that predates ?site= or ?days=all answers with Leagues
+           numbers or a 30-day window rather than an error, and this says so
+           instead of passing them off as what you picked. -->
+      <p id="site-notice" class="site-notice" role="status" hidden></p>
 
       <div class="stat-tiles">
         <!-- Live "right now" figure - unlike every other tile here it is not
@@ -110,6 +133,7 @@
           <div class="panel-inner">
             <div class="panel-head">
               <h2>Pageviews over time</h2>
+              <span id="chart-range" class="page-info"></span>
             </div>
             <div class="chart-canvas-wrap">
               <canvas id="pageviews-chart"></canvas>
@@ -203,6 +227,9 @@
         </div>
       </div>
 
+      <!-- Everything from here to the end of the tier lists is Leagues Planner
+           only, so it is shown (and fetched) only on that tab. -->
+      <div data-site-section="leagues">
       <div class="dashboard-header section-header">
         <h2>Region &amp; relic usage</h2>
         <span class="page-info">All-time - not scoped to the date range above</span>
@@ -395,6 +422,85 @@
             <div id="tier-lists-container"></div>
           </div>
         </div>
+      </div>
+      </div>
+
+      <!-- Movie Battles runs. Counted by the game itself through the RS3
+           service's /api/track-counter (the mb_* categories), so like the
+           Leagues usage counters these are all-time totals. -->
+      <div data-site-section="moviebattles" hidden>
+      <div class="dashboard-header section-header">
+        <h2>Runs</h2>
+        <span class="page-info">All-time - not scoped to the date range above</span>
+      </div>
+
+      <p id="mb-usage-notice" class="site-notice" role="status" hidden></p>
+
+      <div class="stat-tiles">
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value" id="stat-mb-runs-started">&mdash;</span>
+          <span class="stat-label">Runs started</span>
+        </div>
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value" id="stat-mb-runs-ended">&mdash;</span>
+          <span class="stat-label">Runs finished</span>
+        </div>
+        <div class="stat-tile" data-live-scope="data">
+          <span class="stat-value" id="stat-mb-runs-won">&mdash;</span>
+          <span class="stat-label">Runs won</span>
+        </div>
+      </div>
+
+      <div class="breakdown-grid">
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Runs by difficulty</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="mb-runs-started-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Acts reached</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="mb-acts-reached-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-panel" data-panel data-live-scope="data">
+          <div class="panel-inner">
+            <div class="panel-head">
+              <h2>Run endings</h2>
+              <span class="panel-meta" data-panel-meta></span>
+            </div>
+            <div class="panel-body">
+              <table id="mb-run-endings-table" class="stats-table"></table>
+            </div>
+            <div class="panel-pager" data-panel-pager hidden>
+              <button type="button" class="pager-btn" data-pager-prev aria-label="Previous page">&larr;</button>
+              <span class="pager-info" data-pager-info></span>
+              <button type="button" class="pager-btn" data-pager-next aria-label="Next page">&rarr;</button>
+            </div>
+          </div>
+        </div>
+      </div>
       </div>
     </section>
 

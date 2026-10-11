@@ -22,7 +22,22 @@ const STORAGE_KEYS = {
   design: 'jf-admin-design',
   autoActive: 'jf-admin-auto-active',
   autoData: 'jf-admin-auto-data',
+  site: 'jf-admin-site',
 };
+
+// The sites the RS3 service keeps analytics for, by the id its ?site= takes.
+// Both live in the same tables, split by a site column (see the RS3 repo's
+// routes/track.js), and the dashboard only ever shows one at a time.
+const SITES = {
+  leagues: 'Leagues Planner',
+  moviebattles: 'Movie Battles',
+};
+const DEFAULT_SITE = 'leagues';
+
+// Past this many daily points the chart drops its point markers: at All time
+// there can be hundreds, and a marker per day merges into a solid bead along
+// the line that hides its shape.
+const CHART_MARKER_MAX_POINTS = 90;
 
 const loginForm = document.getElementById('login-form');
 const loginPassword = document.getElementById('login-password');
@@ -38,17 +53,37 @@ const autoDataToggle = document.getElementById('auto-data-toggle');
 const classicToggle = document.getElementById('classic-toggle');
 const shortlinksPrevButton = document.getElementById('shortlinks-prev');
 const shortlinksNextButton = document.getElementById('shortlinks-next');
+const siteTabs = document.querySelectorAll('[data-site]');
+const siteSections = document.querySelectorAll('[data-site-section]');
+const siteNotice = document.getElementById('site-notice');
+const mbUsageNotice = document.getElementById('mb-usage-notice');
+const chartRangeEl = document.getElementById('chart-range');
 
 let pageviewsChart;
 let shortlinksPage = 1;
 
-// Everything the dashboard has fetched, kept so the design toggle and the
-// panel pagers can re-render without going back to the network.
+// Everything the dashboard has fetched, kept so the design toggle, the panel
+// pagers and the site tabs can re-render without going back to the network.
+// Kept per site rather than overwritten, for two reasons: switching back to a
+// tab you've already seen paints its last numbers straight away while the
+// refresh runs, and a slow response for one site that lands after you've
+// switched to the other goes into its own slot instead of over the page.
 const state = {
-  summary: null,
-  usage: null,
+  site: DEFAULT_SITE,
+  sites: {
+    leagues: { summary: null, usage: null },
+    moviebattles: { summary: null, usage: null },
+  },
+  // Bumped per summary request, so only the newest one paints - flicking the
+  // range from All time to 7 days must not end on whichever answered last.
+  summarySeq: 0,
+  tierListsLoaded: false,
   lastUpdatedAt: null,
   refreshing: false,
+  // A refresh asked for while one is running (a tab switch mid-refresh, say)
+  // runs once that one finishes instead of being dropped - the running one
+  // may be fetching the other site.
+  refreshQueued: false,
   // Set once the active-users endpoint 404s, so the poll doesn't keep firing
   // at a backend that hasn't shipped it yet (this dashboard and the RS3
   // service deploy independently).
@@ -59,19 +94,25 @@ let autoActiveTimer = null;
 let autoDataTimer = null;
 
 // tableId -> which slice of which payload fills it. Drives both renderers and
-// the per-panel pagers, so a panel is described in exactly one place.
+// the per-panel pagers, so a panel is described in exactly one place. A panel
+// with a `site` belongs to that site's section and reads that site's payload;
+// one without is part of the shared overview and reads the selected site's.
 const PANELS = [
   { tableId: 'top-paths-table', source: 'summary', field: 'topPaths', key: 'path', header: 'Page' },
   { tableId: 'top-referrers-table', source: 'summary', field: 'topReferrers', key: 'referrer', header: 'Referrer' },
   { tableId: 'top-browsers-table', source: 'summary', field: 'topBrowsers', key: 'browser', header: 'Browser' },
   { tableId: 'top-os-table', source: 'summary', field: 'topOperatingSystems', key: 'os', header: 'OS' },
   { tableId: 'top-device-types-table', source: 'summary', field: 'topDeviceTypes', key: 'deviceType', header: 'Device' },
-  { tableId: 'top-region-picks-table', source: 'usage', field: 'regionPicks', key: 'region', header: 'Region' },
-  { tableId: 'top-region-combos-table', source: 'usage', field: 'regionCombos', key: 'combo', header: 'Combination' },
-  { tableId: 'top-league-relics-table', source: 'usage', field: 'leagueRelicPicks', key: 'relic', header: 'Relic' },
-  { tableId: 'top-drop-table-views-table', source: 'usage', field: 'dropTableViews', key: 'relic', header: 'Relic' },
-  { tableId: 'top-build-guide-views-table', source: 'usage', field: 'buildGuideViews', key: 'build', header: 'Build' },
-  { tableId: 'top-blessing-picks-table', source: 'usage', field: 'blessingPicks', key: 'blessing', header: 'Blessing' },
+  { tableId: 'top-region-picks-table', site: 'leagues', source: 'usage', field: 'regionPicks', key: 'region', header: 'Region' },
+  { tableId: 'top-region-combos-table', site: 'leagues', source: 'usage', field: 'regionCombos', key: 'combo', header: 'Combination' },
+  { tableId: 'top-league-relics-table', site: 'leagues', source: 'usage', field: 'leagueRelicPicks', key: 'relic', header: 'Relic' },
+  { tableId: 'top-drop-table-views-table', site: 'leagues', source: 'usage', field: 'dropTableViews', key: 'relic', header: 'Relic' },
+  { tableId: 'top-build-guide-views-table', site: 'leagues', source: 'usage', field: 'buildGuideViews', key: 'build', header: 'Build' },
+  { tableId: 'top-blessing-picks-table', site: 'leagues', source: 'usage', field: 'blessingPicks', key: 'blessing', header: 'Blessing' },
+  // Labels ("Pro League · Hard") are built server-side, so these render as is.
+  { tableId: 'mb-runs-started-table', site: 'moviebattles', source: 'usage', field: 'runsStarted', key: 'difficulty', header: 'Difficulty' },
+  { tableId: 'mb-acts-reached-table', site: 'moviebattles', source: 'usage', field: 'actsReached', key: 'act', header: 'Act' },
+  { tableId: 'mb-run-endings-table', site: 'moviebattles', source: 'usage', field: 'runEndings', key: 'ending', header: 'Ending' },
 ];
 
 // Current page per panel, by tableId. Deliberately survives a refresh - an
@@ -215,20 +256,27 @@ function panelElFor(tableId) {
 function renderPanel(panel) {
   const table = document.getElementById(panel.tableId);
   const panelEl = panelElFor(panel.tableId);
-  const payload = state[panel.source];
-  // Nothing fetched for this source yet - leave the panel alone rather than
-  // painting "No data yet" over it. renderAllPanels runs when the summary
-  // lands, which is before the usage payload it shares the call with, so
-  // without this the usage panels would flash empty on every load.
-  if (!payload) return;
+  const pager = panelEl.querySelector('[data-panel-pager]');
+  const meta = panelEl.querySelector('[data-panel-meta]');
+  const payload = state.sites[panel.site ?? state.site][panel.source];
+  // Nothing fetched for this source yet - blank the panel rather than paint
+  // "No data yet" over it. renderAllPanels runs when the summary lands, which
+  // is before the usage payload it shares the call with, so without this the
+  // usage panels would flash "No data yet" on every load. Blanked rather than
+  // left alone because a tab switch to a site not fetched yet would otherwise
+  // leave the other site's rows on show under this one's tab.
+  if (!payload) {
+    table.innerHTML = '';
+    pager.hidden = true;
+    meta.textContent = '';
+    panelEl.classList.remove('has-more');
+    return;
+  }
   // `?? []` rather than assuming the field exists: this dashboard and the RS3
   // backend deploy independently, so a field this build knows about may not be
   // in the response yet. Renders "No data yet" instead of throwing and
   // blanking every panel after it.
   const rows = payload[panel.field] ?? [];
-
-  const pager = panelEl.querySelector('[data-panel-pager]');
-  const meta = panelEl.querySelector('[data-panel-meta]');
 
   if (isClassic()) {
     renderTable(table, rows, panel.key, panel.header);
@@ -260,8 +308,12 @@ function renderPanel(panel) {
   }
 }
 
+// The other site's section is hidden, so its panels are skipped rather than
+// rendered off-screen.
 function renderAllPanels() {
-  for (const panel of PANELS) renderPanel(panel);
+  for (const panel of PANELS) {
+    if (!panel.site || panel.site === state.site) renderPanel(panel);
+  }
 }
 
 function chartColor(varName) {
@@ -273,6 +325,9 @@ function renderChart(dailySeries) {
   const labels = dailySeries.map((d) => d.day);
   const pageviews = dailySeries.map((d) => d.pageviews);
   const uniqueVisitors = dailySeries.map((d) => d.uniqueVisitors);
+  // All time can run to hundreds of days (see CHART_MARKER_MAX_POINTS).
+  const dense = labels.length > CHART_MARKER_MAX_POINTS;
+  const pointRadius = dense ? 0 : 3;
 
   if (pageviewsChart) pageviewsChart.destroy();
   pageviewsChart = new Chart(ctx, {
@@ -280,21 +335,37 @@ function renderChart(dailySeries) {
     data: {
       labels,
       datasets: [
-        { label: 'Pageviews', data: pageviews, borderColor: chartColor('--chart-1'), borderWidth: 2, tension: 0.2, pointRadius: 3 },
-        { label: 'Unique visitors', data: uniqueVisitors, borderColor: chartColor('--chart-2'), borderWidth: 2, tension: 0.2, pointRadius: 3 },
+        { label: 'Pageviews', data: pageviews, borderColor: chartColor('--chart-1'), borderWidth: 2, tension: 0.2, pointRadius },
+        { label: 'Unique visitors', data: uniqueVisitors, borderColor: chartColor('--chart-2'), borderWidth: 2, tension: 0.2, pointRadius },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // With no markers there is nothing to hover onto, so a dense chart's
+      // tooltip follows the cursor's day instead (both series at once).
+      ...(dense ? { interaction: { mode: 'index', intersect: false } } : {}),
       scales: {
         y: { beginAtZero: true },
-        // Chart.js will happily print all 90 day labels at a 90-day range and
-        // rotate them into an unreadable comb. Same chart, legible axis.
+        // Chart.js will happily print a label for every day - 90 at 90 days,
+        // hundreds at All time - and rotate them into an unreadable comb. Same
+        // chart, legible axis, whatever the range.
         x: { ticks: { autoSkip: true, maxTicksLimit: 12, maxRotation: 0 } },
       },
     },
   });
+}
+
+function clearChart() {
+  if (pageviewsChart) pageviewsChart.destroy();
+  pageviewsChart = undefined;
+}
+
+// "2026-03-04" -> "4 Mar 2026". Parsed by hand: new Date('2026-03-04') is UTC
+// midnight, which renders as the 3rd anywhere west of Greenwich.
+function formatDay(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // A 12-point trend line for the tiles that have a daily series behind them.
@@ -340,17 +411,61 @@ function renderActiveUsers(count) {
   setStat('stat-active-users', formatCompact(count), count.toLocaleString());
 }
 
-function renderSummary(data) {
+// This dashboard and the RS3 service deploy independently, and a backend that
+// predates ?site= or ?days=all doesn't reject them: it ignores them, answering
+// with Leagues numbers or its default 30-day window. The newer response says
+// which site and range it covers (`site`, `allTime`), so a mismatch is caught
+// here and spelled out rather than shown as if it were what was picked.
+function summaryMismatch(data, site, days) {
+  const notes = [];
+  if ((data.site ?? 'leagues') !== site) {
+    notes.push(
+      `The analytics backend doesn't split by site yet, so these are ${SITES[data.site] ?? SITES.leagues} numbers. ` +
+        'Deploy the RS3 Leagues service to see this site on its own.',
+    );
+  }
+  if (days === 'all' && data.allTime !== true) {
+    notes.push(`The backend doesn't support All time yet, so this is the last ${data.days} days.`);
+  }
+  return notes.join(' ');
+}
+
+function setNotice(el, text) {
+  el.textContent = text;
+  el.hidden = !text;
+}
+
+// `days` is the range the summary was requested with, kept alongside it (see
+// loadSummary) so a summary repainted from the cache on a tab switch is
+// checked against what it was asked for, not whatever the select says now.
+function renderSummary(data, days) {
   // `?? 0` rather than assuming the field for the same deploy-skew reason as
   // renderPanel's `?? []`.
   renderActiveUsers(data.activeUsers ?? 0);
   setStat('stat-visitors', formatCompact(data.uniqueVisitors), data.uniqueVisitors.toLocaleString());
   setStat('stat-pageviews', formatCompact(data.totalPageviews), data.totalPageviews.toLocaleString());
   setStat('stat-session-length', formatDuration(data.avgSessionSeconds));
+  setNotice(siteNotice, summaryMismatch(data, state.site, days));
+  // Only All time needs saying: the window starts wherever the site's data
+  // does, which the select can't tell you.
+  chartRangeEl.textContent = data.allTime && data.from ? `Since ${formatDay(data.from)} (${data.days} days)` : '';
 
   renderChart(data.dailySeries);
   renderSparkline(document.getElementById('spark-pageviews'), data.dailySeries.map((d) => d.pageviews));
   renderSparkline(document.getElementById('spark-visitors'), data.dailySeries.map((d) => d.uniqueVisitors));
+}
+
+// What the overview shows for a site that hasn't been fetched yet - dashes,
+// as on first load, rather than the other site's numbers under this one's tab.
+function clearSummary() {
+  for (const id of ['stat-active-users', 'stat-visitors', 'stat-pageviews', 'stat-session-length']) {
+    setStat(id, '—', '');
+  }
+  setNotice(siteNotice, '');
+  chartRangeEl.textContent = '';
+  clearChart();
+  document.getElementById('spark-pageviews').replaceChildren();
+  document.getElementById('spark-visitors').replaceChildren();
 }
 
 // Ever-incrementing usage counters (see RS3's deploy/migrations/008_usage_counters.sql
@@ -360,6 +475,33 @@ function renderSummary(data) {
 function renderUsage(data) {
   setStat('stat-karamja-toggled-off', formatCompact(data.karamjaToggledOffCount), data.karamjaToggledOffCount.toLocaleString());
   setStat('stat-import-relics-used', formatCompact(data.importRelicsUsedCount), data.importRelicsUsedCount.toLocaleString());
+}
+
+// Movie Battles' share of the same counters table (the mb_* categories), which
+// the backend sums into run totals - all-time, like renderUsage's.
+function renderMbUsage(data) {
+  // A backend without the ?site=moviebattles branch answers with the Leagues
+  // usage payload instead, which has no `totals`. Dashes and a note, not
+  // zeros: zero runs would be a claim, and a wrong one.
+  const totals = data.totals;
+  setNotice(
+    mbUsageNotice,
+    totals ? '' : "The analytics backend doesn't count Movie Battles runs yet. Deploy the RS3 Leagues service to see them.",
+  );
+  const tiles = [
+    ['stat-mb-runs-started', totals?.runsStarted],
+    ['stat-mb-runs-ended', totals?.runsEnded],
+    ['stat-mb-runs-won', totals?.runsWon],
+  ];
+  for (const [id, value] of tiles) {
+    if (typeof value === 'number') setStat(id, formatCompact(value), value.toLocaleString());
+    else setStat(id, '—', '');
+  }
+}
+
+function renderSiteUsage(site, data) {
+  if (site === 'moviebattles') renderMbUsage(data);
+  else renderUsage(data);
 }
 
 function renderShortlinksTable(data) {
@@ -391,16 +533,21 @@ function renderShortlinksTable(data) {
   shortlinksNextButton.disabled = data.page >= totalPages;
 }
 
-async function loadUsage() {
+// One endpoint, two payloads: ?site=moviebattles returns run totals, anything
+// else the Leagues counters. Stored under the site it was asked for and only
+// painted if that is still the tab on show (see `state`).
+async function loadUsage(site) {
   try {
-    const res = await fetch(`${API_BASE}/usage`, { credentials: 'include' });
+    const res = await fetch(`${API_BASE}/usage?site=${site}`, { credentials: 'include' });
     if (res.status === 401) {
       showLogin();
       return;
     }
     if (!res.ok) throw new Error(`usage failed: ${res.status}`);
-    state.usage = await res.json();
-    renderUsage(state.usage);
+    const data = await res.json();
+    state.sites[site].usage = data;
+    if (site !== state.site) return;
+    renderSiteUsage(site, data);
     renderAllPanels();
   } catch (err) {
     console.error(err);
@@ -425,20 +572,33 @@ async function loadShortlinks(page) {
   }
 }
 
-// Returns whether the summary actually loaded (vs. falling back to the
-// login form) - callers use this to decide whether it's worth also loading
-// the shortlinks page (see initDashboard).
+// The selected site's summary for the selected range. Returns whether it
+// actually loaded (vs. falling back to the login form) - callers use this to
+// decide whether it's worth also loading the rest (see refreshAll).
 async function loadSummary() {
   dashboardError.hidden = true;
+  const site = state.site;
+  const days = daysSelect.value;
+  const seq = ++state.summarySeq;
   try {
-    const res = await fetch(`${API_BASE}/summary?days=${daysSelect.value}`, { credentials: 'include' });
+    const res = await fetch(`${API_BASE}/summary?site=${site}&days=${days}`, { credentials: 'include' });
     if (res.status === 401) {
       showLogin();
       return false;
     }
     if (!res.ok) throw new Error(`summary failed: ${res.status}`);
-    state.summary = await res.json();
-    renderSummary(state.summary);
+    const data = await res.json();
+    // A newer request has gone out since (another range, or the other tab):
+    // this one is already stale, so it's dropped rather than cached - a
+    // summary for a range no longer selected would be repainted on the next
+    // tab switch as if it were current.
+    if (seq !== state.summarySeq) return true;
+    state.sites[site].summary = data;
+    state.sites[site].summaryDays = days;
+    // Still this site's, so kept for when its tab is next opened, but the
+    // page is showing the other one now.
+    if (site !== state.site) return true;
+    renderSummary(data, days);
     renderAllPanels();
     showDashboard();
     return true;
@@ -455,8 +615,9 @@ async function loadSummary() {
 // aggregations a minute to read a number held in that process's memory.
 async function loadActiveUsers() {
   if (state.activeUsersUnavailable) return;
+  const site = state.site;
   try {
-    const res = await fetch(`${API_BASE}/active-users`, { credentials: 'include' });
+    const res = await fetch(`${API_BASE}/active-users?site=${site}`, { credentials: 'include' });
     if (res.status === 401) {
       showLogin();
       return;
@@ -476,8 +637,12 @@ async function loadActiveUsers() {
     }
     if (!res.ok) throw new Error(`active-users failed: ${res.status}`);
     const data = await res.json();
+    const summary = state.sites[site].summary;
+    if (summary) summary.activeUsers = data.activeUsers ?? 0;
+    // The tab changed while this was in flight - the count is the other
+    // site's, so it updates that site's cached summary only.
+    if (site !== state.site) return;
     renderActiveUsers(data.activeUsers ?? 0);
-    if (state.summary) state.summary.activeUsers = data.activeUsers ?? 0;
   } catch (err) {
     console.error(err);
   }
@@ -499,25 +664,48 @@ function paintLastUpdated() {
   else lastUpdatedEl.textContent = `Updated ${Math.round(seconds / 60)}m ago`;
 }
 
-// Every data source at once - what the Refresh button and the "auto-refresh
-// data" timer both run. Guarded so a click mid-refresh (or a timer tick that
-// lands on a slow request) doesn't stack a second set of requests.
+// The selected site's own sections. Each tab fetches only what it shows: the
+// Leagues counters, short links and tier lists never load on the Movie
+// Battles tab, nor the run totals on the Leagues one. Tier lists load once
+// and then only on demand (their type toggle, a hide/refuse) - the timer
+// re-rendering every submitted list a minute would be all cost.
+function loadSiteSections() {
+  if (state.site === 'moviebattles') return loadUsage('moviebattles');
+  // The shortlinks page you were on, not page 1 - same reasoning as panelPages.
+  const jobs = [loadShortlinks(shortlinksPage), loadUsage('leagues')];
+  if (!state.tierListsLoaded) jobs.push(loadTierLists());
+  return Promise.all(jobs);
+}
+
+// Every data source for the selected site - what the Refresh button, the
+// "auto-refresh data" timer and a tab switch all run. Guarded so a click
+// mid-refresh (or a timer tick that lands on a slow request) doesn't stack a
+// second set of requests; one asked for meanwhile runs straight after instead,
+// since the tab may have changed under the running one.
 async function refreshAll() {
-  if (state.refreshing) return;
+  if (state.refreshing) {
+    state.refreshQueued = true;
+    return;
+  }
   state.refreshing = true;
   refreshButton.classList.add('is-refreshing');
   refreshButton.disabled = true;
   try {
     const loaded = await loadSummary();
     if (loaded) {
-      // The page you were on, not page 1 - same reasoning as panelPages.
-      await Promise.all([loadShortlinks(shortlinksPage), loadUsage()]);
+      // state.site read after the summary rather than captured before it, so
+      // a tab switched mid-request doesn't fetch the old tab's sections.
+      await loadSiteSections();
       setLastUpdated(Date.now());
     }
   } finally {
     state.refreshing = false;
     refreshButton.classList.remove('is-refreshing');
     refreshButton.disabled = false;
+  }
+  if (state.refreshQueued) {
+    state.refreshQueued = false;
+    await refreshAll();
   }
 }
 
@@ -551,6 +739,7 @@ function persistToggles() {
     localStorage.setItem(STORAGE_KEYS.autoActive, String(autoActiveToggle.checked));
     localStorage.setItem(STORAGE_KEYS.autoData, String(autoDataToggle.checked));
     localStorage.setItem(STORAGE_KEYS.design, classicToggle.checked ? 'classic' : 'modern');
+    localStorage.setItem(STORAGE_KEYS.site, state.site);
   } catch {
     // Private-browsing / blocked storage - the toggles still work for this
     // session, they just won't be remembered.
@@ -572,6 +761,7 @@ function restorePreferences() {
       design: localStorage.getItem(STORAGE_KEYS.design),
       autoActive: localStorage.getItem(STORAGE_KEYS.autoActive),
       autoData: localStorage.getItem(STORAGE_KEYS.autoData),
+      site: localStorage.getItem(STORAGE_KEYS.site),
     };
   } catch {
     stored = {};
@@ -580,10 +770,46 @@ function restorePreferences() {
   autoActiveToggle.checked = stored.autoActive === 'true';
   autoDataToggle.checked = stored.autoData === 'true';
   dashboard.dataset.design = classicToggle.checked ? 'classic' : 'modern';
+  // Checked against SITES so a stale or hand-edited value can't select a tab
+  // that doesn't exist.
+  applySite(Object.hasOwn(SITES, stored.site ?? '') ? stored.site : DEFAULT_SITE);
 }
 
-// Loads the summary, the first shortlinks page, and usage counters - used
-// on initial load and right after logging in.
+// Points the page at a site: the tabs, which sections show, and what the
+// overview paints until the refresh lands - the site's last-fetched numbers
+// if it has been opened this visit, dashes if not. Fetches nothing itself.
+function applySite(site) {
+  state.site = site;
+  dashboard.dataset.site = site;
+  for (const tab of siteTabs) {
+    const active = tab.dataset.site === site;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  }
+  for (const section of siteSections) {
+    section.hidden = section.dataset.siteSection !== site;
+  }
+
+  const cached = state.sites[site];
+  if (cached.summary) renderSummary(cached.summary, cached.summaryDays);
+  else clearSummary();
+  if (cached.usage) renderSiteUsage(site, cached.usage);
+  renderAllPanels();
+}
+
+function switchSite(site) {
+  if (site === state.site) return;
+  applySite(site);
+  persistToggles();
+  // "Updated 2m ago" was about the other site's numbers.
+  setLastUpdated(null);
+  refreshAll();
+}
+
+for (const tab of siteTabs) {
+  tab.addEventListener('click', () => switchSite(tab.dataset.site));
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tier lists
 //
@@ -794,6 +1020,7 @@ async function loadTierLists() {
     document.getElementById('stat-tier-agreed').textContent = data.stats.mostAgreed?.name ?? '—';
     renderTierItemStats(data.stats);
     renderTierLists(data.lists);
+    state.tierListsLoaded = true;
   } catch (err) {
     console.error(err);
   }
@@ -835,10 +1062,13 @@ tierListsContainer.addEventListener('click', async (event) => {
   }
 });
 
+// Everything the selected tab shows - used on initial load and right after
+// logging in. Only that tab's: the other site's data loads if and when its
+// tab is opened.
 async function initDashboard() {
   const loaded = await loadSummary();
   if (loaded) {
-    await Promise.all([loadShortlinks(1), loadUsage(), loadTierLists()]);
+    await loadSiteSections();
     setLastUpdated(Date.now());
     if (autoActiveToggle.checked) startAutoActive();
     if (autoDataToggle.checked) startAutoData();
@@ -874,9 +1104,11 @@ logoutButton.addEventListener('click', async () => {
   showLogin();
 });
 
-// Only the summary is date-scoped, so browsing a shortlinks page (or the usage
-// counters, which have no date range at all) isn't lost just from tweaking the
-// date range.
+// Only the summary is date-scoped - on both tabs, All time included - so
+// browsing a shortlinks page (or the usage and run counters, which have no
+// date range at all) isn't lost just from tweaking the date range. The other
+// site's cached summary keeps its old range until its tab is next opened,
+// which refetches it with this one (see applySite and summaryDays).
 daysSelect.addEventListener('change', async () => {
   await loadSummary();
   setLastUpdated(Date.now());
